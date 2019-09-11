@@ -8,8 +8,7 @@ class JsonReader:
     def __init__(self):
         print("todo: JsonReader init")
 
-    def read(self, path):
-        file = open(path + "_output.txt") #TODO: determine how much of a path will be passed in
-        json_file = file.read()
-        output_dictionary = json.loads(json_file) #get the dictionary
+    def read(self, path, page_num, extra_end_txt):
+        file = open(path + page_num + extra_end_txt)
+        output_dictionary = json.loads(file.read()) #get the dictionary
         return output_dictionary
