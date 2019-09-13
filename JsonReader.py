@@ -6,7 +6,7 @@ import json
 
 class JsonReader:
     def __init__(self):
-        print("todo: JsonReader init")
+        self.file = ""
 
     def read(self, path, page_num, extra_end_txt):
         file = open(path + page_num + extra_end_txt)
