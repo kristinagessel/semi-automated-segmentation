@@ -8,6 +8,7 @@ that has all the page points combined. When doing many pages, sometimes the dict
 will get too big to hold in memory and TrainingMaskGenerator will get killed before the instance part can complete.
 '''
 
+
 path_to_json_files = "/Volumes/Research/1. Research/Experiments/TrainingMasksAll/"
 path_to_hi_res_images = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/"
 
@@ -27,3 +28,13 @@ for file in files:
 print("Finished loading.")
 file = open(path_to_json_files + "instance_basic_avg/instance_pts.txt", "w")
 ujson.dump(pg_pts, file, indent=1)
+'''
+#for each slice, read all the files... add appropriate points to the image, then close
+for slice in slices:
+    pg_pts = {}
+    im = cv2.imread(path_to_hi_res_images + slice)
+    for file in files:
+        file = open(path_to_json_files + file)
+        output = json.loads(file.read()) #get the dictionary
+'''
+
