@@ -42,7 +42,6 @@ class TrainingMaskGenerator:
 
     #floodfill for a whole page
     def do_floodfill(self, filtered_output, page):
-        radius = 1
         iter = 0
         seg_pixels = {}
 
@@ -50,15 +49,19 @@ class TrainingMaskGenerator:
             slice_num = slice.zfill(4)
             im = cv2.imread(self.img_path + slice_num + ".tif")
             stack = filtered_output[slice].copy()
+            start_pts = filtered_output[slice].copy()
             visited = []
             height, width, channels = im.shape
+
+            avg = self.calc_avg_pg_width(start_pts, im) #avg width might change some in different slices?
+
             while stack: #"while stack is not empty"
                 point = stack.pop()
                 visited.append(point)
                 x = int(point[0])
                 y = int(point[1])
                 im[y][x] = (255, 0, 0) #make the visited point blue
-                valid_neighbors= self.floodfill_check_neighbors(im, point, height, width)
+                valid_neighbors= self.floodfill_check_neighbors(im, point, height, width, avg, start_pts)
                 for pt in valid_neighbors:
                     if pt not in visited and pt not in stack:
                         stack.append(pt)
@@ -78,7 +81,42 @@ class TrainingMaskGenerator:
                 im)
         return seg_pixels
 
-    def floodfill_check_neighbors(self, im, pixel, height, width):
+
+    #TODO: could set a limit for how far the flood fill can reach out to prevent flood fill from crossing into a connected neighboring page?
+    #TODO: *****calculate the AVERAGE width of a single page by checking the width in a consistent way from each point.
+    # (thicknesses vary between pages because it's vellum, but the same page is generally the same thickness except where tears are)
+    # That way if some are extra long, we can throw them out and then give the flood fill a limit of how much it can expand by the average
+    # Maybe even calculate the distance between each point so we can set a sort of oval boundary
+    #store the 'distance' in the stack too?
+    def calc_avg_pg_width(self, pts, im):
+        pt_counts = []
+        for pt in pts:
+            x_pos = pt[0]
+            y_pos = pt[1]
+            #from this pt, go left and right from the pixel. Get this length.
+            grey_val = im[y_pos][x_pos][0]  # pixel access is BACKWARDS--(y,x)
+            length_ctr = 1
+
+            #go left
+            while grey_val > self.low_tolerance and grey_val < self.high_tolerance:
+                x_pos -= 1
+                grey_val = im[y_pos][x_pos][0]
+                length_ctr += 1
+
+            #go right
+            while grey_val > self.low_tolerance and grey_val < self.high_tolerance:
+                x_pos += 1
+                grey_val = im[y_pos][x_pos][0]
+                length_ctr += 1
+            pt_counts.append(length_ctr)
+        #TODO: do we need to throw out outliers?
+        return np.average(pt_counts)
+
+
+
+    #TODO: use avg width to limit how far we are checking for neighbors so we don't fill more pages where pages overlap
+    #TODO: compare avg to start_pts? if current x > nearest start_pt + avg, stop? (buggy I think)
+    def floodfill_check_neighbors(self, im, pixel, height, width, avg_width, start_pts):
         valid_neighbors = []
         x = [-1, 0, 1]
         y = [-1, 0, 1]
