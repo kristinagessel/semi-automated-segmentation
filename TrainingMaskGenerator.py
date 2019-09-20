@@ -27,7 +27,6 @@ class TrainingMaskGenerator:
     def generate_mask_for_pg(self, page_num):
         reader = JsonReader()
         output = reader.read(self.path_to_high_res_json, page_num, "_output.txt")
-        #filtered_output = self.filter_output(output, page_num)
         pg_seg_pixels = self.do_floodfill(output, page_num)#filtered_output, page_num)
         #TODO: later use the pg_seg_pixels returned by do_floodfill to stitch all the pages together in one slice image?
 
@@ -36,16 +35,16 @@ class TrainingMaskGenerator:
         return pg_seg_pixels
 
     #floodfill for a whole page
-    def do_floodfill(self, filtered_output, page):
+    def do_floodfill(self, seg_pts, page):
         iter = 0
         seg_pixels = {}
 
-        for slice in filtered_output:
+        for slice in seg_pts:
             slice_num = slice.zfill(4)
             stack = []
             visited = []
             im = cv2.imread(self.img_path + slice_num + ".tif")
-            for elem in filtered_output[slice]:
+            for elem in seg_pts[slice]:
                 x = int(elem[0])
                 y = int(elem[1])
                 pixel = im[y][x][0]
@@ -99,7 +98,7 @@ class TrainingMaskGenerator:
                 length_ctr += 1
             pt_counts.append(length_ctr)
         pt_counts.sort()
-        pt_counts = pt_counts[2:len(pt_counts)-6] #TODO: do we need to throw out outliers?
+        #pt_counts = pt_counts[2:len(pt_counts)-6] #TODO: do we need to throw out outliers?
 
         if math.isnan(np.average(pt_counts)):
             return 0
@@ -133,6 +132,31 @@ class TrainingMaskGenerator:
     def calculate_distance_from_origin(self, point, origin):
         return abs(point[0] - origin[0])
 
+    def create_semantic_training_set(self, page_points):
+        master = {}
+        #merge all the dictionaries we have
+        for page in page_points:
+            for slice in page_points[page]:
+                if slice in master:
+                    master[slice] = page_points[page][slice]
+                else:
+                    master[slice] = []
+                    master[slice].append(page_points[page][slice])
+        for slice in master:
+            slice_num = slice.zfill(4)
+            im = cv2.imread(self.img_path + slice_num + ".tif")
+            for pt in master[slice]:
+                x = int(pt[0]) # point of interest's x (not origin point's x)
+                y = int(pt[1])
+                im[y][x] = (255, 0, 0) #make the visited point blue
+            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/total"):
+                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/total")
+            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/total/" + str(
+            slice) + "/_semantic_mask" + ".tif",
+                    im)
+
+
+
 def main():
     PATH_TO_HI_RES_WORK_DONE = "/Volumes/Research/1. Research/MS910.volpkg/work-done/hi-res/"
     PATH_TO_LOW_RES_WORK_DONE = "/Volumes/Research/1. Research/MS910.volpkg/work-done/low-res/"
@@ -143,7 +167,11 @@ def main():
     ex = Extractor()
     seg_dict = ex.find_all_segmentations(path_to_work_done)
 
-    for page in seg_dict:
-        page_segs[page] = gen.generate_mask_for_pg(page)
+    page_segs["1"] = gen.generate_mask_for_pg("1")
+    page_segs["15"] = gen.generate_mask_for_pg("15")
+    #for page in seg_dict:
+    #    page_segs[page] = gen.generate_mask_for_pg(page)
+
+    gen.create_semantic_training_set(page_segs)
 
 main()
