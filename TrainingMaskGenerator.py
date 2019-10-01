@@ -222,7 +222,9 @@ def main():
     seg_dict = ex.find_all_segmentations(path_to_work_done)
 
     page_segs["1"] = gen.generate_mask_for_pg("1")
-    page_segs["15"] = gen.generate_mask_for_pg("15")
+    page_segs["2"] = gen.generate_mask_for_pg("2")
+    page_segs["3"] = gen.generate_mask_for_pg("3")
+    #page_segs["15"] = gen.generate_mask_for_pg("15")
     #for page in seg_dict:
     #    page_segs[page] = gen.generate_mask_for_pg(page)
 
