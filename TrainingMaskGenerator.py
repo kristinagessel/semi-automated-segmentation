@@ -155,6 +155,60 @@ class TrainingMaskGenerator:
             slice) + "/_semantic_mask" + ".tif",
                     im)
 
+    #Find each page's closest point to the conflicted pixel
+    def find_closest_pt(self, curr_pg, conflict_pg, x, y):
+        print("todo")
+        return curr_pg, conflict_pg #TODO: change this to be correct
+
+    def create_instance_training_set(self, page_points, orig_pts):
+        master = {}
+        pg_colors = {}
+        pg_ctr = 0
+        #need to keep page specific data separate, but condense under the same slice
+        for page in page_points:
+            # select a random color for this page
+            color = tuple(np.random.choice(range(256), size=3))
+            if color not in pg_colors:  # we want a brand new color for each page
+                pg_colors[page] = color
+            else:
+                while color in pg_colors:
+                    color = tuple(np.random.choice(range(256), size=3) * 256)
+
+            for slice in page_points[page]:
+                if slice not in master:
+                    master[slice] = {}
+                if page not in master[slice]: # slice: page: [pts]
+                    master[slice][page] = []
+                for pt in page_points[page][slice]:
+                    master[slice][page].append(pt)
+        for slice in master:
+            slice_num = slice.zfill(4)
+            im = cv2.imread(self.img_path + slice_num + ".tif")
+            for page in master[slice]:
+                color = pg_colors[page]
+                for pt in master[slice][page]:
+                    x = pt[0]
+                    y = pt[1]
+
+                    if tuple(im[y][x]) in pg_colors.values() and tuple(im[y][x]) != pg_colors[page]: #if it's a color we picked for a previous page, we have a 'merge conflict'. Decide which page this pixel belongs to by checking which page has the nearest point.
+                        current_pg = page
+                        conflict_pg = "unknown(error)"
+                        for pg in pg_colors:
+                            if pg_colors[pg] == tuple(im[y][x]):
+                                conflict_pg = pg
+                        current_pt, conflict_pt = self.find_closest_pt(current_pg, conflict_pg, x, y)
+                        print("instance seg merge conflict between pages ", page, " and ", conflict_pg, ": ", x, ", ", y)
+                        #determine what page the conflict is with (can check color, but do we want to?)
+                        #find the nearest original point for each page. Nearest point gets the pixel. Either change the color or leave it alone based on the outcome.
+                        #TODO: implement this and when the color changes, update the master appropriately because that is what we'll use for the training
+                    else:
+                        im[y][x] = color
+            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance"):
+                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance")
+            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance/" + str(slice) + "_instance_mask" + ".tif", im)
+            #TODO: when we actually want to use this, we will have to find a way to create polygons out of these points
+        return master
+
 
 
 def main():
@@ -173,5 +227,6 @@ def main():
     #    page_segs[page] = gen.generate_mask_for_pg(page)
 
     gen.create_semantic_training_set(page_segs)
+    gen.create_instance_training_set(page_segs, 0)
 
 main()
