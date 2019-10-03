@@ -1,9 +1,3 @@
-'''
-Take the dictionary from JsonReader and use it to do a
-flood fill threshold thing to make masks for each page that we have work done for
-'''
-import json
-
 import cv2
 import os
 import numpy as np
@@ -27,16 +21,15 @@ class TrainingMaskGenerator:
     def generate_mask_for_pg(self, page_num):
         reader = JsonReader()
         output = reader.read(self.path_to_high_res_json, page_num, "_output.txt")
-        pg_seg_pixels = self.do_floodfill(output, page_num)#filtered_output, page_num)
+        pg_seg_pixels, filtered_pts = self.do_floodfill(output, page_num)#filtered_output, page_num)
         #TODO: later use the pg_seg_pixels returned by do_floodfill to stitch all the pages together in one slice image?
 
         #TODO: eventually... to do instance segmentation we need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points not connected
         #to the main group of points
-        return pg_seg_pixels
+        return pg_seg_pixels, filtered_pts
 
     #floodfill for a whole page
     def do_floodfill(self, seg_pts, page):
-        iter = 0
         seg_pixels = {}
 
         for slice in seg_pts:
@@ -48,7 +41,7 @@ class TrainingMaskGenerator:
                 x = int(elem[0])
                 y = int(elem[1])
                 pixel = im[y][x][0]
-                if(pixel > 30): #check for tears TODO: better filter params?
+                if(pixel > self.low_tolerance and pixel < self.high_tolerance): #check for tears and bright spots (minerals?)
                     stack.append(((x, y), (x, y))) #append a tuple of ((point), (origin point)) to keep track of how far we are from the original point
 
             start_pts = stack.copy()
@@ -72,7 +65,7 @@ class TrainingMaskGenerator:
                 os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page)
             cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page + "/" + str(slice) + "_mask" + "_avg=" + str(avg) + ".tif",
                 im)
-        return seg_pixels
+        return seg_pixels, start_pts
 
 
     #store the 'distance' in the stack too?
@@ -118,7 +111,7 @@ class TrainingMaskGenerator:
         y_pos = pixel[0][1]
         for i in y: #height
             for j in x: #width
-                if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= avg_width/2: #Don't want the center pixel or any out of bounds
+                if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= math.ceil(avg_width/2): #Don't want the center pixel or any out of bounds
                     grey_val = im[y_pos + i][x_pos + j][0] #pixel access is BACKWARDS--(y,x)
                     if grey_val > self.low_tolerance and grey_val < self.high_tolerance:
                         valid_neighbors.append((x_pos + j, y_pos + i))
@@ -137,28 +130,27 @@ class TrainingMaskGenerator:
         #merge all the dictionaries we have
         for page in page_points:
             for slice in page_points[page]:
-                if slice in master:
-                    master[slice] = page_points[page][slice]
-                else:
+                if slice not in master:
                     master[slice] = []
-                    master[slice].append(page_points[page][slice])
+                for pt in page_points[page][slice]:
+                    master[slice].append(pt)
         for slice in master:
             slice_num = slice.zfill(4)
             im = cv2.imread(self.img_path + slice_num + ".tif")
+            slice_pts = master[slice]
             for pt in master[slice]:
-                x = int(pt[0]) # point of interest's x (not origin point's x)
+                x = int(pt[0])
                 y = int(pt[1])
-                im[y][x] = (255, 0, 0) #make the visited point blue
-            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/total"):
-                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/total")
-            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/total/" + str(
-            slice) + "/_semantic_mask" + ".tif",
-                    im)
+                im[y][x] = (255, 0, 0)
+            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg"):
+                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg")
+            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg/" + str(slice) + "_semantic_mask" + ".tif", im)
 
     #Find each page's closest point to the conflicted pixel
-    def find_closest_pt(self, curr_pg, conflict_pg, x, y):
+    def find_closest_pt(self, curr_pg, conflict_pg, pixel_loc, orig_pts):
+        #TODO:
         print("todo")
-        return curr_pg, conflict_pg #TODO: change this to be correct
+        return curr_pg, conflict_pg #TODO: work on this
 
     def create_instance_training_set(self, page_points, orig_pts):
         master = {}
@@ -192,43 +184,72 @@ class TrainingMaskGenerator:
 
                     if tuple(im[y][x]) in pg_colors.values() and tuple(im[y][x]) != pg_colors[page]: #if it's a color we picked for a previous page, we have a 'merge conflict'. Decide which page this pixel belongs to by checking which page has the nearest point.
                         current_pg = page
-                        conflict_pg = "unknown(error)"
-                        for pg in pg_colors:
-                            if pg_colors[pg] == tuple(im[y][x]):
-                                conflict_pg = pg
-                        current_pt, conflict_pt = self.find_closest_pt(current_pg, conflict_pg, x, y)
+                        conflict_pg = self.find_conflict_pg(tuple(im[y][x]), pg_colors)
+                        current_pg_pt, conflict_pg_pt = self.find_closest_pt(current_pg, conflict_pg, (x, y), orig_pts)
                         print("instance seg merge conflict between pages ", page, " and ", conflict_pg, ": ", x, ", ", y)
-                        #determine what page the conflict is with (can check color, but do we want to?)
-                        #find the nearest original point for each page. Nearest point gets the pixel. Either change the color or leave it alone based on the outcome.
+                        closest_color = self.compare_distances_to_px(current_pg_pt, color, conflict_pg_pt, tuple(im[y][x]), (x, y))
+                        im[x][y] = closest_color
                         #TODO: implement this and when the color changes, update the master appropriately because that is what we'll use for the training
                     else:
                         im[y][x] = color
-            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance"):
-                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance")
-            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance/" + str(slice) + "_instance_mask" + ".tif", im)
+            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg"):
+                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg")
+            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg/" + str(slice) + "_instance_mask" + ".tif", im)
             #TODO: when we actually want to use this, we will have to find a way to create polygons out of these points
         return master
 
+    '''
+    Calculate the Euclidean distance between the nearest candidate point for both pages and see which one is closer.
+    (If they're equal, leave it alone...)
+    '''
+    def compare_distances_to_px(self, pg1_pt, pg1_color, pg2_pt, pg2_color, pixel_pt):
+        pg1_x_delta = abs(pixel_pt[0] - int(pg1_pt[0]))
+        pg1_y_delta = abs(pixel_pt[1] - int(pg1_pt[1]))
+        pg1_distance = math.sqrt(pg1_x_delta ** 2 + pg1_y_delta ** 2)
 
+        pg2_x_delta = abs(pixel_pt[0] - int(pg2_pt[0]))
+        pg2_y_delta = abs(pixel_pt[1] - int(pg2_pt[1]))
+        pg2_distance = math.sqrt(pg2_x_delta ** 2 + pg2_y_delta ** 2)
+
+        if pg1_distance < pg2_distance:
+            return pg1_color
+        else:
+            return pg2_color
+
+
+    def find_conflict_pg(self, color, pg_colors):
+        for pg in pg_colors:
+            if pg_colors[pg] == color:
+                return pg
+        return "unknown(error)"
 
 def main():
     PATH_TO_HI_RES_WORK_DONE = "/Volumes/Research/1. Research/MS910.volpkg/work-done/hi-res/"
     PATH_TO_LOW_RES_WORK_DONE = "/Volumes/Research/1. Research/MS910.volpkg/work-done/low-res/"
     path_to_work_done = PATH_TO_HI_RES_WORK_DONE
     page_segs = {}
+    filtered_pts = {} #filtered start pts
 
     gen = TrainingMaskGenerator()
     ex = Extractor()
     seg_dict = ex.find_all_segmentations(path_to_work_done)
 
-    page_segs["1"] = gen.generate_mask_for_pg("1")
-    page_segs["2"] = gen.generate_mask_for_pg("2")
-    page_segs["3"] = gen.generate_mask_for_pg("3")
-    #page_segs["15"] = gen.generate_mask_for_pg("15")
+    #page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
+    page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
+    page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
+    #page_segs["4"], filtered_pts["4"] = gen.generate_mask_for_pg("4")
+    #page_segs["5"], filtered_pts["5"] = gen.generate_mask_for_pg("5")
+    #page_segs["15"], filtered_pts["15"] = gen.generate_mask_for_pg("15")
+    #page_segs["16"], filtered_pts["16"] = gen.generate_mask_for_pg("16")
+
+
+    #The following pages are incomplete:
+    #page_segs["17"], filtered_pts["17"] = gen.generate_mask_for_pg("17")
+    #page_segs["18"], filtered_pts["18"] = gen.generate_mask_for_pg("18")
     #for page in seg_dict:
     #    page_segs[page] = gen.generate_mask_for_pg(page)
 
     gen.create_semantic_training_set(page_segs)
-    gen.create_instance_training_set(page_segs, 0)
+    gen.create_instance_training_set(page_segs, filtered_pts)
 
 main()
