@@ -5,9 +5,10 @@ import os
 import numpy as np
 import math
 
-from Extractor import Extractor
+from DrawPoints import Extractor
 from JsonReader import JsonReader
 import matplotlib.pyplot as plt
+from scipy.spatial import distance
 
 
 class TrainingMaskGenerator:
@@ -23,21 +24,20 @@ class TrainingMaskGenerator:
     def generate_mask_for_pg(self, page_num):
         reader = JsonReader()
         output = reader.read(self.path_to_high_res_json, page_num, "_output.txt")
-        pg_seg_pixels, filtered_pts = self.do_floodfill(output, page_num)#filtered_output, page_num)
-        #TODO: later use the pg_seg_pixels returned by do_floodfill to stitch all the pages together in one slice image?
-
-        #TODO: eventually... to do instance segmentation we need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points not connected
-        #to the main group of points
-        return pg_seg_pixels, filtered_pts
+        pg_seg_pixels, filtered_pts_dict = self.do_floodfill(output, page_num)
+        #TODO: eventually... to do instance segmentation we might need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points that aren't connected in some cases
+        return pg_seg_pixels, filtered_pts_dict
 
     #floodfill for a whole page
     def do_floodfill(self, seg_pts, page):
         seg_pixels = {}
+        start_pt_dict = {}
 
         for slice in seg_pts:
             slice_num = slice.zfill(4)
             stack = []
             visited = []
+            start_pts = []
             im = cv2.imread(self.img_path + slice_num + ".tif")
             for elem in seg_pts[slice]:
                 x = int(elem[0])
@@ -45,8 +45,12 @@ class TrainingMaskGenerator:
                 pixel = im[y][x][0]
                 if(pixel > self.low_tolerance and pixel < self.high_tolerance): #check for tears and bright spots (minerals?)
                     stack.append(((x, y), (x, y))) #append a tuple of ((point), (origin point)) to keep track of how far we are from the original point
+                    start_pts.append((x,y))
+                    if slice not in start_pt_dict:
+                        start_pt_dict[slice] = []
+                    start_pt_dict[slice].append((x,y))
 
-            start_pts = stack.copy()
+            #start_pts = stack.copy()
             height, width, channel = im.shape
 
             avg = int(self.calc_avg_pg_width(start_pts, im)) #avg width might change some in different slices?
@@ -59,23 +63,23 @@ class TrainingMaskGenerator:
                 im[y][x] = (255, 0, 0) #make the visited point blue
                 valid_neighbors = self.floodfill_check_neighbors(im, point, height, width, avg)
                 for pt in valid_neighbors:
-                    if pt not in visited and tuple(pt) not in (i[0] for i in stack): #same point (x,y) from different origin point should not be added
-                        stack.append((tuple(pt), tuple(point[1]))) #append a tuple of form ((point), (origin point for parent point))
+                    if pt not in visited and tuple(pt) not in (i[0] for i in stack):
+                        stack.append((tuple(pt), tuple(point[1]))) #append a tuple of form ((point), (parent's origin point))
 
             seg_pixels[slice] = visited #put the list of all the pixels that make up the page into the dictionary to be returned at the end so we can use them all together if we want
             if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page):
                 os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page)
             cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page + "/" + str(slice) + "_mask" + "_avg=" + str(avg) + ".tif",
                 im)
-        return seg_pixels, start_pts
+        return seg_pixels, start_pt_dict
 
 
     #store the 'distance' in the stack too?
     def calc_avg_pg_width(self, pts, im):
         pt_counts = []
         for pt in pts:
-            x_pos = pt[0][0]
-            y_pos = pt[0][1]
+            x_pos = pt[0]
+            y_pos = pt[1]
             #from this pt, go left and right from the pixel. Get this length.
             grey_val = im[y_pos][x_pos][0]  # pixel access is BACKWARDS--(y,x)
             length_ctr = 1
@@ -92,7 +96,7 @@ class TrainingMaskGenerator:
                 grey_val = im[y_pos][x_pos][0]
                 length_ctr += 1
             pt_counts.append(length_ctr)
-        pt_counts.sort()
+        #pt_counts.sort()
         #pt_counts = pt_counts[2:len(pt_counts)-6] #TODO: do we need to throw out outliers?
 
         if math.isnan(np.average(pt_counts)):
@@ -148,12 +152,6 @@ class TrainingMaskGenerator:
             cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg/" + str(slice) + "_semantic_mask" + ".tif", im)
         return master
 
-    #Find each page's closest point to the conflicted pixel
-    def find_closest_pt(self, curr_pg, conflict_pg, pixel_loc, orig_pts):
-        #TODO:
-        print("todo")
-        return curr_pg, conflict_pg #TODO: work on this
-
     def create_instance_training_set(self, page_points, orig_pts):
         master = {}
         pg_colors = {}
@@ -168,13 +166,17 @@ class TrainingMaskGenerator:
                 while color in pg_colors:
                     color = tuple(np.random.choice(range(256), size=3) * 256)
 
+            #put all the points into the master dictionary in the format we want
             for slice in page_points[page]:
                 if slice not in master:
                     master[slice] = {}
                 if page not in master[slice]: # slice: page: [pts]
                     master[slice][page] = []
                 for pt in page_points[page][slice]:
-                    master[slice][page].append(pt)
+                    if pt not in master[slice][page]: #TODO: looks like there are some duplicates in page_points, look into where that is happening
+                        master[slice][page].append(pt)
+                    else:
+                        print("duplicate")
         for slice in master:
             slice_num = slice.zfill(4)
             im = cv2.imread(self.img_path + slice_num + ".tif")
@@ -187,11 +189,13 @@ class TrainingMaskGenerator:
                     if tuple(im[y][x]) in pg_colors.values() and tuple(im[y][x]) != pg_colors[page]: #if it's a color we picked for a previous page, we have a 'merge conflict'. Decide which page this pixel belongs to by checking which page has the nearest point.
                         current_pg = page
                         conflict_pg = self.find_conflict_pg(tuple(im[y][x]), pg_colors)
-                        current_pg_pt, conflict_pg_pt = self.find_closest_pt(current_pg, conflict_pg, (x, y), orig_pts)
-                        print("instance seg merge conflict between pages ", page, " and ", conflict_pg, ": ", x, ", ", y)
+                        current_pg_pt, conflict_pg_pt = self.find_closest_pt(current_pg, conflict_pg, (x, y), orig_pts, slice)
+                        print("instance seg merge conflict between pages ", page, " and ", conflict_pg, ": ", x, ", ", y, " slice ", slice)
                         closest_color = self.compare_distances_to_px(current_pg_pt, color, conflict_pg_pt, tuple(im[y][x]), (x, y))
-                        im[x][y] = closest_color
-                        #TODO: implement this and when the color changes, update the master appropriately because that is what we'll use for the training
+                        im[y][x] = closest_color
+                        if closest_color == pg_colors[page]: #if we did change the color, reflect that in the master list
+                            master[slice][conflict_pg].remove(pt)
+                            master[slice][current_pg].append(pt)
                     else:
                         im[y][x] = color
             if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg"):
@@ -200,9 +204,23 @@ class TrainingMaskGenerator:
             #TODO: when we actually want to use this, we will have to find a way to create polygons out of these points
         return master
 
+
+    #Find each page's closest point to the conflicted pixel
+    def find_closest_pt(self, curr_pg, conflict_pg, pixel_loc, orig_pts, slice):
+        curr_pg_pts = orig_pts[curr_pg][slice]
+        conflict_pg_pts = orig_pts[conflict_pg][slice]
+        pixel_loc = np.array(pixel_loc)
+        curr_pg_pts = np.asarray(curr_pg_pts)
+        conflict_pg_pts = np.asarray(conflict_pg_pts)
+
+        closest_index_curr_pg = distance.cdist([pixel_loc], curr_pg_pts).argmin()
+        closest_index_conflict_pg = distance.cdist([pixel_loc], conflict_pg_pts).argmin()
+
+        return curr_pg_pts[closest_index_curr_pg], conflict_pg_pts[closest_index_conflict_pg]
+
     '''
     Calculate the Euclidean distance between the nearest candidate point for both pages and see which one is closer.
-    (If they're equal, leave it alone...)
+    (If they're equal, just leave it alone...)
     '''
     def compare_distances_to_px(self, pg1_pt, pg1_color, pg2_pt, pg2_color, pixel_pt):
         pg1_x_delta = abs(pixel_pt[0] - int(pg1_pt[0]))
@@ -230,11 +248,9 @@ def main():
     PATH_TO_LOW_RES_WORK_DONE = "/Volumes/Research/1. Research/MS910.volpkg/work-done/low-res/"
     path_to_work_done = PATH_TO_HI_RES_WORK_DONE
     page_segs = {}
-    filtered_pts = {} #filtered start pts
+    filtered_pts = {}
 
     gen = TrainingMaskGenerator()
-    ex = Extractor()
-    seg_dict = ex.find_all_segmentations(path_to_work_done)
 
     #page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
     page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
