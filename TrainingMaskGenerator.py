@@ -1,3 +1,5 @@
+import json
+
 import cv2
 import os
 import numpy as np
@@ -45,19 +47,19 @@ class TrainingMaskGenerator:
                     stack.append(((x, y), (x, y))) #append a tuple of ((point), (origin point)) to keep track of how far we are from the original point
 
             start_pts = stack.copy()
-            height, width, channels = im.shape
+            height, width, channel = im.shape
 
             avg = int(self.calc_avg_pg_width(start_pts, im)) #avg width might change some in different slices?
 
             while stack:
                 point = stack.pop()
-                visited.append(point[0]) #only the point itself, don't care about the parent it came from
+                visited.append(point[0])
                 x = int(point[0][0]) # point of interest's x (not origin point's x)
                 y = int(point[0][1])
                 im[y][x] = (255, 0, 0) #make the visited point blue
-                valid_neighbors= self.floodfill_check_neighbors(im, point, height, width, avg)
+                valid_neighbors = self.floodfill_check_neighbors(im, point, height, width, avg)
                 for pt in valid_neighbors:
-                    if pt not in visited and (tuple(pt), tuple(point[1])) not in stack:
+                    if pt not in visited and tuple(pt) not in (i[0] for i in stack): #same point (x,y) from different origin point should not be added
                         stack.append((tuple(pt), tuple(point[1]))) #append a tuple of form ((point), (origin point for parent point))
 
             seg_pixels[slice] = visited #put the list of all the pixels that make up the page into the dictionary to be returned at the end so we can use them all together if we want
@@ -137,7 +139,6 @@ class TrainingMaskGenerator:
         for slice in master:
             slice_num = slice.zfill(4)
             im = cv2.imread(self.img_path + slice_num + ".tif")
-            slice_pts = master[slice]
             for pt in master[slice]:
                 x = int(pt[0])
                 y = int(pt[1])
@@ -145,6 +146,7 @@ class TrainingMaskGenerator:
             if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg"):
                 os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg")
             cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg/" + str(slice) + "_semantic_mask" + ".tif", im)
+        return master
 
     #Find each page's closest point to the conflicted pixel
     def find_closest_pt(self, curr_pg, conflict_pg, pixel_loc, orig_pts):
@@ -249,7 +251,12 @@ def main():
     #for page in seg_dict:
     #    page_segs[page] = gen.generate_mask_for_pg(page)
 
-    gen.create_semantic_training_set(page_segs)
-    gen.create_instance_training_set(page_segs, filtered_pts)
+    semantic_master = gen.create_semantic_training_set(page_segs)
+    file = open("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg/semantic_pts.txt", "w")
+    file.write(json.dumps(semantic_master, indent=1))
+
+    instance_master = gen.create_instance_training_set(page_segs, filtered_pts)
+    file = open("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg/instance_pts.txt", "w")
+    file.write(json.dumps(instance_master, indent=1))
 
 main()
