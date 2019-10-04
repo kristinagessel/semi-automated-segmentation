@@ -33,7 +33,7 @@ class TrainingMaskGenerator:
         seg_pixels = {}
         start_pt_dict = {}
 
-        for slice in seg_pts:
+        for slice in seg_pts: #flood fill one slice, one page
             slice_num = slice.zfill(4)
             stack = []
             visited = []
@@ -117,7 +117,7 @@ class TrainingMaskGenerator:
         y_pos = pixel[0][1]
         for i in y: #height
             for j in x: #width
-                if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= math.ceil(avg_width/2): #Don't want the center pixel or any out of bounds
+                if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1: #and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= math.ceil(avg_width) + 2:#/2): #Don't want the center pixel or any out of bounds
                     grey_val = im[y_pos + i][x_pos + j][0] #pixel access is BACKWARDS--(y,x)
                     if grey_val > self.low_tolerance and grey_val < self.high_tolerance:
                         valid_neighbors.append((x_pos + j, y_pos + i))
@@ -126,10 +126,12 @@ class TrainingMaskGenerator:
 
     #what distance metric?
     #for now, try just distance in the x direction?
-    #TODO: maybe later make a 'rectangle' of eligible space where x bound is average width and y bound is the y coord of the next point...?
     #TODO: try Euclidean?
     def calculate_distance_from_origin(self, point, origin):
-        return abs(point[0] - origin[0])
+        delta_x = abs(point[0] - origin[0])
+        delta_y = abs(point[1] - origin[1])
+        distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
+        return distance
 
     def create_semantic_training_set(self, page_points):
         master = {}
@@ -155,12 +157,10 @@ class TrainingMaskGenerator:
     def create_instance_training_set(self, page_points, orig_pts):
         master = {}
         pg_colors = {}
-        pg_ctr = 0
-        #need to keep page specific data separate, but condense under the same slice
+        #keep page specific data separate, but condense under the same slice
         for page in page_points:
-            # select a random color for this page
             color = tuple(np.random.choice(range(256), size=3))
-            if color not in pg_colors:  # we want a brand new color for each page
+            if color not in pg_colors:  # we want a unique color for each page
                 pg_colors[page] = color
             else:
                 while color in pg_colors:
@@ -175,8 +175,7 @@ class TrainingMaskGenerator:
                 for pt in page_points[page][slice]:
                     if pt not in master[slice][page]: #TODO: looks like there are some duplicates in page_points, look into where that is happening
                         master[slice][page].append(pt)
-                    else:
-                        print("duplicate")
+
         for slice in master:
             slice_num = slice.zfill(4)
             im = cv2.imread(self.img_path + slice_num + ".tif")
@@ -201,7 +200,7 @@ class TrainingMaskGenerator:
             if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg"):
                 os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg")
             cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg/" + str(slice) + "_instance_mask" + ".tif", im)
-            #TODO: when we actually want to use this, we will have to find a way to create polygons out of these points
+            #TODO: create polygons out of these points?
         return master
 
 
@@ -252,13 +251,20 @@ def main():
 
     gen = TrainingMaskGenerator()
 
-    #page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
-    page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
-    page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
+    page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
+    #page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
+    #page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
     #page_segs["4"], filtered_pts["4"] = gen.generate_mask_for_pg("4")
     #page_segs["5"], filtered_pts["5"] = gen.generate_mask_for_pg("5")
+    #page_segs["9"], filtered_pts["9"] = gen.generate_mask_for_pg("9")
+    #page_segs["10"], filtered_pts["10"] = gen.generate_mask_for_pg("10")
+    #page_segs["11"], filtered_pts["11"] = gen.generate_mask_for_pg("11")
+    #page_segs["12"], filtered_pts["12"] = gen.generate_mask_for_pg("12")
     #page_segs["15"], filtered_pts["15"] = gen.generate_mask_for_pg("15")
     #page_segs["16"], filtered_pts["16"] = gen.generate_mask_for_pg("16")
+
+    #page_segs["1-1"], filtered_pts["1-1"] = gen.generate_mask_for_pg("1-1")
+    #page_segs["1-2"], filtered_pts["1-2"] = gen.generate_mask_for_pg("1-2")
 
 
     #The following pages are incomplete:
