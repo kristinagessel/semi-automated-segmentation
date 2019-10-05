@@ -10,6 +10,8 @@ from JsonReader import JsonReader
 import matplotlib.pyplot as plt
 from scipy.spatial import distance
 
+PATH_TO_SAVE_OUTPUT = "/Volumes/Research/1. Research/Experiments/TrainingMasks/"
+
 
 class TrainingMaskGenerator:
     def __init__(self):
@@ -17,23 +19,33 @@ class TrainingMaskGenerator:
         self.LOW_RES_PATH = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/"
         self.path_to_high_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/high_res_output/"
         self.path_to_low_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/low_res_output/"
-        self.img_path = self.HI_RES_PATH
+        self.img_path = self.LOW_RES_PATH
         self.low_tolerance = 65
         self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
-    def generate_mask_for_pg(self, page_num):
+    def generate_mask_for_pg(self, page_name, page_nums=None):
+        if page_nums == None: #If the list of page numbers is not specified, use the specified page name as the only element in the list
+            page_nums = [page_name]
         reader = JsonReader()
-        output = reader.read(self.path_to_high_res_json, page_num, "_output.txt")
-        pg_seg_pixels, filtered_pts_dict = self.do_floodfill(output, page_num)
+        output = {}
+        for page in page_nums:
+            tmp = reader.read(self.path_to_low_res_json, page, "_output.txt")
+            for slice in tmp:
+                if slice not in output:
+                    output[slice] = []
+                for pt in tmp[slice]:
+                    output[slice].append(pt)
+
+        pg_seg_pixels, filtered_pts_dict = self.do_floodfill(output, page_name)
         #TODO: eventually... to do instance segmentation we might need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points that aren't connected in some cases
         return pg_seg_pixels, filtered_pts_dict
 
-    #floodfill for a whole page
+    #floodfill for a single page
     def do_floodfill(self, seg_pts, page):
         seg_pixels = {}
         start_pt_dict = {}
 
-        for slice in seg_pts: #flood fill one slice, one page
+        for slice in seg_pts:
             slice_num = slice.zfill(4)
             stack = []
             visited = []
@@ -50,23 +62,22 @@ class TrainingMaskGenerator:
                         start_pt_dict[slice] = []
                     start_pt_dict[slice].append((x,y))
 
-            #start_pts = stack.copy()
             height, width, channel = im.shape
 
-            avg = int(self.calc_avg_pg_width(start_pts, im)) #avg width might change some in different slices?
+            avg = int(self.calc_avg_pg_width(start_pts, im))
 
             while stack:
                 point = stack.pop()
                 visited.append(point[0])
                 x = int(point[0][0]) # point of interest's x (not origin point's x)
                 y = int(point[0][1])
-                im[y][x] = (255, 0, 0) #make the visited point blue
+                im[y][x] = (255, 0, 0)
                 valid_neighbors = self.floodfill_check_neighbors(im, point, height, width, avg)
                 for pt in valid_neighbors:
                     if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                         stack.append((tuple(pt), tuple(point[1]))) #append a tuple of form ((point), (parent's origin point))
 
-            seg_pixels[slice] = visited #put the list of all the pixels that make up the page into the dictionary to be returned at the end so we can use them all together if we want
+            seg_pixels[slice] = visited #put the list of all the pixels that make up the page into the dictionary to be returned at the end so we can use them later
             if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page):
                 os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page)
             cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/" + page + "/" + str(slice) + "_mask" + "_avg=" + str(avg) + ".tif",
@@ -74,14 +85,14 @@ class TrainingMaskGenerator:
         return seg_pixels, start_pt_dict
 
 
-    #store the 'distance' in the stack too?
+    #TODO: improve on this. The complex shape of the pages means this doesn't work too well.
     def calc_avg_pg_width(self, pts, im):
         pt_counts = []
         for pt in pts:
             x_pos = pt[0]
             y_pos = pt[1]
             #from this pt, go left and right from the pixel. Get this length.
-            grey_val = im[y_pos][x_pos][0]  # pixel access is BACKWARDS--(y,x)
+            grey_val = im[y_pos][x_pos][0]
             length_ctr = 1
 
             #go left
@@ -96,19 +107,12 @@ class TrainingMaskGenerator:
                 grey_val = im[y_pos][x_pos][0]
                 length_ctr += 1
             pt_counts.append(length_ctr)
-        #pt_counts.sort()
-        #pt_counts = pt_counts[2:len(pt_counts)-6] #TODO: do we need to throw out outliers?
 
         if math.isnan(np.average(pt_counts)):
             return 0
         return np.average(pt_counts)
 
 
-
-    #TODO: could set a limit for how far the flood fill can reach out to prevent flood fill from crossing into a connected neighboring page?
-    # (thicknesses vary between pages because it's vellum, but the same page is generally the same thickness except where tears are)
-    # That way if some are extra long, we can throw them out and then give the flood fill a limit of how much it can expand by the average
-    # Maybe even calculate the distance between each point so we can set a sort of oval boundary
     def floodfill_check_neighbors(self, im, pixel, height, width, avg_width):
         valid_neighbors = []
         x = [-1, 0, 1]
@@ -117,16 +121,14 @@ class TrainingMaskGenerator:
         y_pos = pixel[0][1]
         for i in y: #height
             for j in x: #width
-                if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1: #and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= math.ceil(avg_width) + 2:#/2): #Don't want the center pixel or any out of bounds
-                    grey_val = im[y_pos + i][x_pos + j][0] #pixel access is BACKWARDS--(y,x)
+                if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
+                    grey_val = im[y_pos + i][x_pos + j][0]
                     if grey_val > self.low_tolerance and grey_val < self.high_tolerance:
                         valid_neighbors.append((x_pos + j, y_pos + i))
         return valid_neighbors
 
 
     #what distance metric?
-    #for now, try just distance in the x direction?
-    #TODO: try Euclidean?
     def calculate_distance_from_origin(self, point, origin):
         delta_x = abs(point[0] - origin[0])
         delta_y = abs(point[1] - origin[1])
@@ -135,7 +137,7 @@ class TrainingMaskGenerator:
 
     def create_semantic_training_set(self, page_points):
         master = {}
-        #merge all the dictionaries we have
+        #merge all the dictionaries we have (don't care what page each pixel belongs to anymore)
         for page in page_points:
             for slice in page_points[page]:
                 if slice not in master:
@@ -149,9 +151,9 @@ class TrainingMaskGenerator:
                 x = int(pt[0])
                 y = int(pt[1])
                 im[y][x] = (255, 0, 0)
-            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg"):
-                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg")
-            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg/" + str(slice) + "_semantic_mask" + ".tif", im)
+            if not os.path.exists(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg"):
+                os.mkdir(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg")
+            cv2.imwrite(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg/" + str(slice) + "_semantic_mask" + ".tif", im)
         return master
 
     def create_instance_training_set(self, page_points, orig_pts):
@@ -173,7 +175,7 @@ class TrainingMaskGenerator:
                 if page not in master[slice]: # slice: page: [pts]
                     master[slice][page] = []
                 for pt in page_points[page][slice]:
-                    if pt not in master[slice][page]: #TODO: looks like there are some duplicates in page_points, look into where that is happening
+                    if pt not in master[slice][page]: #TODO: looks like there are some duplicates in page_points, look into that
                         master[slice][page].append(pt)
 
         for slice in master:
@@ -189,22 +191,24 @@ class TrainingMaskGenerator:
                         current_pg = page
                         conflict_pg = self.find_conflict_pg(tuple(im[y][x]), pg_colors)
                         current_pg_pt, conflict_pg_pt = self.find_closest_pt(current_pg, conflict_pg, (x, y), orig_pts, slice)
-                        print("instance seg merge conflict between pages ", page, " and ", conflict_pg, ": ", x, ", ", y, " slice ", slice)
+                        #print("instance seg merge conflict between pages ", page, " and ", conflict_pg, ": ", x, ", ", y, " slice ", slice)
                         closest_color = self.compare_distances_to_px(current_pg_pt, color, conflict_pg_pt, tuple(im[y][x]), (x, y))
                         im[y][x] = closest_color
-                        if closest_color == pg_colors[page]: #if we did change the color, reflect that in the master list
+                        if closest_color == pg_colors[page]: #if we did change the page this pixel belongs to, reflect that in the master list
                             master[slice][conflict_pg].remove(pt)
                             master[slice][current_pg].append(pt)
                     else:
                         im[y][x] = color
-            if not os.path.exists("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg"):
-                os.mkdir("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg")
-            cv2.imwrite("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg/" + str(slice) + "_instance_mask" + ".tif", im)
+            if not os.path.exists(PATH_TO_SAVE_OUTPUT + "instance_basic_avg"):
+                os.mkdir(PATH_TO_SAVE_OUTPUT + "instance_basic_avg")
+            cv2.imwrite(PATH_TO_SAVE_OUTPUT + "instance_basic_avg/" + str(slice) + "_instance_mask" + ".tif", im)
             #TODO: create polygons out of these points?
         return master
 
 
-    #Find each page's closest point to the conflicted pixel
+    '''
+    Find both pages' closest manual segmentation point to the conflicted pixel
+    '''
     def find_closest_pt(self, curr_pg, conflict_pg, pixel_loc, orig_pts, slice):
         curr_pg_pts = orig_pts[curr_pg][slice]
         conflict_pg_pts = orig_pts[conflict_pg][slice]
@@ -219,7 +223,7 @@ class TrainingMaskGenerator:
 
     '''
     Calculate the Euclidean distance between the nearest candidate point for both pages and see which one is closer.
-    (If they're equal, just leave it alone...)
+    (If they're equal, leave it alone...)
     '''
     def compare_distances_to_px(self, pg1_pt, pg1_color, pg2_pt, pg2_color, pixel_pt):
         pg1_x_delta = abs(pixel_pt[0] - int(pg1_pt[0]))
@@ -252,33 +256,39 @@ def main():
     gen = TrainingMaskGenerator()
 
     page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
-    #page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
-    #page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
-    #page_segs["4"], filtered_pts["4"] = gen.generate_mask_for_pg("4")
-    #page_segs["5"], filtered_pts["5"] = gen.generate_mask_for_pg("5")
-    #page_segs["9"], filtered_pts["9"] = gen.generate_mask_for_pg("9")
-    #page_segs["10"], filtered_pts["10"] = gen.generate_mask_for_pg("10")
-    #page_segs["11"], filtered_pts["11"] = gen.generate_mask_for_pg("11")
-    #page_segs["12"], filtered_pts["12"] = gen.generate_mask_for_pg("12")
-    #page_segs["15"], filtered_pts["15"] = gen.generate_mask_for_pg("15")
-    #page_segs["16"], filtered_pts["16"] = gen.generate_mask_for_pg("16")
+    page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
+    page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
+    page_segs["4"], filtered_pts["4"] = gen.generate_mask_for_pg("4")
+    page_segs["5"], filtered_pts["5"] = gen.generate_mask_for_pg("5")
+    page_segs["6"], filtered_pts["6"] = gen.generate_mask_for_pg("6")
+    page_segs["7"], filtered_pts["7"] = gen.generate_mask_for_pg("7")
+    page_segs["8"], filtered_pts["8"] = gen.generate_mask_for_pg("8")
+    page_segs["9"], filtered_pts["9"] = gen.generate_mask_for_pg("9")
+    page_segs["10"], filtered_pts["10"] = gen.generate_mask_for_pg("10")
+    page_segs["11"], filtered_pts["11"] = gen.generate_mask_for_pg("11")
+    page_segs["12"], filtered_pts["12"] = gen.generate_mask_for_pg("12")
+    page_segs["13"], filtered_pts["13"] = gen.generate_mask_for_pg("13")
+    page_segs["14"], filtered_pts["14"] = gen.generate_mask_for_pg("14")
+    page_segs["15"], filtered_pts["15"] = gen.generate_mask_for_pg("15")
+    page_segs["16"], filtered_pts["16"] = gen.generate_mask_for_pg("16")
 
-    #page_segs["1-1"], filtered_pts["1-1"] = gen.generate_mask_for_pg("1-1")
-    #page_segs["1-2"], filtered_pts["1-2"] = gen.generate_mask_for_pg("1-2")
-
+    #page_parts = ["1-1", "1-2"]
+    #page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1-lowres", page_parts)
 
     #The following pages are incomplete:
     #page_segs["17"], filtered_pts["17"] = gen.generate_mask_for_pg("17")
     #page_segs["18"], filtered_pts["18"] = gen.generate_mask_for_pg("18")
+
+    #For all pages that we have:
     #for page in seg_dict:
     #    page_segs[page] = gen.generate_mask_for_pg(page)
 
     semantic_master = gen.create_semantic_training_set(page_segs)
-    file = open("/Volumes/Research/1. Research/Experiments/TrainingMasks/semantic_basic_avg/semantic_pts.txt", "w")
+    file = open(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg/semantic_pts.txt", "w")
     file.write(json.dumps(semantic_master, indent=1))
 
     instance_master = gen.create_instance_training_set(page_segs, filtered_pts)
-    file = open("/Volumes/Research/1. Research/Experiments/TrainingMasks/instance_basic_avg/instance_pts.txt", "w")
+    file = open(PATH_TO_SAVE_OUTPUT + "instance_basic_avg/instance_pts.txt", "w")
     file.write(json.dumps(instance_master, indent=1))
 
 main()
