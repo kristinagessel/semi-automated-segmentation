@@ -37,6 +37,9 @@ class TrainingMaskGenerator:
                     output[slice].append(pt)
 
         pg_seg_pixels, filtered_pts_dict = self.do_floodfill(output, page_name)
+
+        file = open(PATH_TO_SAVE_OUTPUT + page_name + ".txt", "w")
+        json.dump(pg_seg_pixels, file, indent=1)
         #TODO: eventually... to do instance segmentation we might need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points that aren't connected in some cases
         return pg_seg_pixels, filtered_pts_dict
 
@@ -285,10 +288,10 @@ def main():
 
     semantic_master = gen.create_semantic_training_set(page_segs)
     file = open(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg/semantic_pts.txt", "w")
-    file.write(json.dumps(semantic_master, indent=1))
+    json.dump(semantic_master, file, indent=1)
 
     instance_master = gen.create_instance_training_set(page_segs, filtered_pts)
     file = open(PATH_TO_SAVE_OUTPUT + "instance_basic_avg/instance_pts.txt", "w")
-    file.write(json.dumps(instance_master, indent=1))
+    json.dump(instance_master, file, indent=1) #Stream directly to file, eliminates memory issues for large strings
 
 main()
