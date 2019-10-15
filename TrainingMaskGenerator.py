@@ -19,13 +19,23 @@ class TrainingMaskGenerator:
         self.LOW_RES_PATH = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/"
         self.path_to_high_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/high_res_output/"
         self.path_to_low_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/low_res_output/"
-        self.img_path = self.LOW_RES_PATH
+        self.img_path = self.HI_RES_PATH
         self.low_tolerance = 65
         self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
     def generate_mask_for_pg(self, page_name, page_nums=None):
         if page_nums == None: #If the list of page numbers is not specified, use the specified page name as the only element in the list
             page_nums = [page_name]
+
+        output = self.load_work_done(self.path_to_high_res_json, page_nums)
+        pg_seg_pixels, filtered_pts_dict = self.do_floodfill(output, page_name)
+
+        file = open(PATH_TO_SAVE_OUTPUT + page_name + ".txt", "w")
+        json.dump(pg_seg_pixels, file, indent=1)
+        #TODO: eventually... to do instance segmentation we might need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points that aren't connected in some cases
+        return pg_seg_pixels, filtered_pts_dict
+
+    def load_work_done(self, path, page_nums):
         reader = JsonReader()
         output = {}
         for page in page_nums:
@@ -35,13 +45,7 @@ class TrainingMaskGenerator:
                     output[slice] = []
                 for pt in tmp[slice]:
                     output[slice].append(pt)
-
-        pg_seg_pixels, filtered_pts_dict = self.do_floodfill(output, page_name)
-
-        file = open(PATH_TO_SAVE_OUTPUT + page_name + ".txt", "w")
-        json.dump(pg_seg_pixels, file, indent=1)
-        #TODO: eventually... to do instance segmentation we might need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points that aren't connected in some cases
-        return pg_seg_pixels, filtered_pts_dict
+        return output
 
     #floodfill for a single page
     def do_floodfill(self, seg_pts, page):
@@ -208,6 +212,14 @@ class TrainingMaskGenerator:
             #TODO: create polygons out of these points?
         return master
 
+    def load_instance_from_txt(self, path_to_txt, page_nums):
+        reader = JsonReader()
+        output = {}
+        for page in page_nums:
+            tmp = reader.read(self.path_to_low_res_json, page, ".txt")
+            output[page] = tmp
+        return output
+
 
     '''
     Find both pages' closest manual segmentation point to the conflicted pixel
@@ -258,6 +270,7 @@ def main():
 
     gen = TrainingMaskGenerator()
 
+    '''
     page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
     page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
     page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
@@ -281,10 +294,14 @@ def main():
     #The following pages are incomplete:
     #page_segs["17"], filtered_pts["17"] = gen.generate_mask_for_pg("17")
     #page_segs["18"], filtered_pts["18"] = gen.generate_mask_for_pg("18")
+    '''
+
 
     #For all pages that we have:
     #for page in seg_dict:
     #    page_segs[page] = gen.generate_mask_for_pg(page)
+
+    #page_segs = load_instance_from_txt(PATH_TO_SAVE_OUTPUT)
 
     semantic_master = gen.create_semantic_training_set(page_segs)
     file = open(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg/semantic_pts.txt", "w")
