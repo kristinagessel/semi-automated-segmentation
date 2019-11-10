@@ -2,7 +2,6 @@ import math
 import os
 import re
 import struct
-import json
 
 import numpy as np
 import progressbar

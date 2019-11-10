@@ -3,7 +3,6 @@ import json
 import os
 import cv2
 import re
-import JsonReader as jr
 import matplotlib.pyplot as plt
 import sys
 
@@ -122,7 +121,8 @@ def main():
     if READ_JSON:
         print("Reading JSON...")
         for page in seg_dict:
-            output_dictionary = jr.JsonReader().read(path_to_high_res_json, page, "_output.txt")
+            file = open(path_to_high_res_json + page + "_output.txt")
+            output_dictionary = json.loads(file.read())
 
             for slice_num in output_dictionary:  # for key in dictionary
                 points_of_interest = output_dictionary[slice_num]  # Look for the slice num in the dictionary

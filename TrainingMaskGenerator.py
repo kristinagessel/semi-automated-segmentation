@@ -5,9 +5,6 @@ import os
 import numpy as np
 import math
 
-from DrawPoints import Extractor
-from JsonReader import JsonReader
-import matplotlib.pyplot as plt
 from scipy.spatial import distance
 
 PATH_TO_SAVE_OUTPUT = "/Volumes/Research/1. Research/Experiments/TrainingMasks/"
@@ -36,10 +33,10 @@ class TrainingMaskGenerator:
         return pg_seg_pixels, filtered_pts_dict
 
     def load_work_done(self, path, page_nums):
-        reader = JsonReader()
         output = {}
         for page in page_nums:
-            tmp = reader.read(self.path_to_low_res_json, page, "_output.txt")
+            file = open(self.path_to_low_res_json + page + "_output.txt")
+            tmp = json.loads(file.read())
             for slice in tmp:
                 if slice not in output:
                     output[slice] = []
@@ -47,6 +44,19 @@ class TrainingMaskGenerator:
                     output[slice].append(pt)
         return output
 
+    '''
+    3D Flood Fill
+    Run flood fill on a 'cube' (3x3x2 cube?) containing current slice and next slice.
+    In this way we won't necessarily proceed in a linear way through the slices.
+    '''
+    def do_3d_floodfill(self):
+        return 0 #TODO
+
+    '''
+    2D Flood Fill
+    Has a simple bounds check that relies on the (bad) estimate of the average width of the page.
+    This lets us avoid filling way too much and crossing excessively into other pages, but a better solution is needed.
+    '''
     #floodfill for a single page
     def do_floodfill(self, seg_pts, page):
         seg_pixels = {}
@@ -213,10 +223,10 @@ class TrainingMaskGenerator:
         return master
 
     def load_instance_from_txt(self, path_to_txt, page_nums):
-        reader = JsonReader()
         output = {}
         for page in page_nums:
-            tmp = reader.read(self.path_to_low_res_json, page, ".txt")
+            file = open(self.path_to_low_res_json + page + ".txt")
+            tmp = json.loads(file.read())
             output[page] = tmp
         return output
 

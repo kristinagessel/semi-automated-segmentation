@@ -13,7 +13,7 @@ HI_RES_PATH = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342
 
 '''
 Read JSON
-Convert to a format readable by Meshlab, like (X Y Z ; X Y Z ; ...)
+Convert to a format readable by Meshlab, like (X Y Z R G B\n X Y Z R G B\n ...)
 We have X and Y, Z increments by 1 each slice.
 '''
 def convertJSONToXYZ(path, out_path):
@@ -37,14 +37,6 @@ def convertJSONToXYZ(path, out_path):
                 x = int(pt[0])
                 y = int(pt[1])
                 intensity = im[y][x]
-                if intensity[0] + 30 > 255:
-                    intensity[0] = 255
-                    intensity[1] = 255
-                    intensity[2] = 255
-                else:
-                    intensity[0] += 30
-                    intensity[1] += 30
-                    intensity[2] += 30
                 out_file.write(str(x) + " " + str(y) + " " + str(z) + " " + str(intensity[0]) + " " + str(intensity[1]) + " " + str(intensity[2]) + "\n")
             z += 1
         out_file.close()
