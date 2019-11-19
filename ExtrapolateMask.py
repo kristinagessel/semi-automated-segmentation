@@ -14,6 +14,38 @@ PATH_TO_VOLUME = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092
 PATH_TO_POINTSETS = ""
 PATH_TO_SAVE_LOCATION = "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/"
 
+class Pixel:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.is_set = False
+        self.neighbors = [[None for x in range(3)] for y in range(3)]
+        '''
+        Corresponds with the for loop that checks 8 neighbors.
+        (x,y) = (0,1) is directly north from center
+        (x,y) = (0,-1) is directly south from center
+        (x,y) = (1,0) is directly east from center
+        (x,y) = (-1,0) is directly west from center
+        ...
+        '''
+        self.neighbors[0][1] = None #North neighbor
+        self.neighbors[0][-1] = None
+        self.neighbors[1][0] = None
+        self.neighbors[-1][0] = None
+        self.neighbors[1][1] = None #northeast
+        self.neighbors[-1][1] = None
+        self.neighbors[1][-1] = None
+        self.neighbors[-1][-1] = None #southwest
+
+    def set_neighbor(self, x, y, new_neighbor):
+        self.neighbors[x][y] = new_neighbor
+
+    def set(self):
+        self.is_set = True
+
+    def unset(self):
+        self.is_set = False
+
 '''
 Scenario:
 1. User uses VC to identify what page they want. (Draw the segmentation line on one(?) slice, hopefully close to the center of the page)
@@ -95,9 +127,16 @@ class MaskExtrapolator:
             x = int(elem[0])
             y = int(elem[1])
             pixel = im[y][x][0]
+            if x not in self.all_checked_pixels:
+                self.all_checked_pixels[x] = {}
+            self.all_checked_pixels[x][y] = Pixel(x, y)
 
             if (pixel > self.low_tolerance and pixel < self.high_tolerance):  # check for tears and bright spots (minerals?)
                 stack.append([(x, y), (x, y)])  # append a tuple of ((point), (origin point)) to keep track of how far we are from the original point
+                if x not in self.set_pixels:
+                    self.set_pixels[x] = {}
+                self.set_pixels[x][y] = self.all_checked_pixels[x][y]
+                self.set_pixels[x][y].set()  # Set as a valid page TODO: does this set it also in all_checked_pixels?
                 start_pts.append((x, y))
 
         height, width, channel = im.shape #grab the image properties for bounds checking later
@@ -139,6 +178,7 @@ class MaskExtrapolator:
         return 0  # TODO
 
     #Taken from TrainingMaskGenerator's implementation
+    #TODO: add neighbors for every Pixel (pixel) we are checking
     def floodfill_check_neighbors(self, im, pixel, height, width, avg_width):
         valid_neighbors = []
         x = [-1, 0, 1]
@@ -149,8 +189,22 @@ class MaskExtrapolator:
             for j in x: #width
                 if (y_pos != 0 or x_pos != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(pixel[0], pixel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
                     grey_val = im[y_pos + i][x_pos + j][0]
+
+                    #TODO: check and make sure this works
+                    #if (x_pos + j) not in self.all_checked_pixels or (y_pos + i) not in self.all_checked_pixels[x_pos + j]: #If this exact point has not been checked before, check it.
+                    if (x_pos + j) not in self.all_checked_pixels:
+                        self.all_checked_pixels[x_pos + j] = {}
+                    self.all_checked_pixels[x_pos + j][y_pos + i] = Pixel(x_pos + j, y_pos + i)
+
                     if grey_val > self.low_tolerance and grey_val < self.high_tolerance:
+                        if (x_pos + j) not in self.set_pixels:
+                            self.set_pixels[x_pos + j] = {}
+                        self.set_pixels[x_pos + j][y_pos + i] = self.all_checked_pixels[x_pos + j][y_pos + i]
+                        self.set_pixels[x_pos + j][y_pos + i].set() #since it fits in the tolerances, this pixel will be active.
                         valid_neighbors.append((x_pos + j, y_pos + i))
+
+                    if i != 0 or j != 0:
+                        self.set_pixels[x_pos][y_pos].set_neighbor(j, i, self.all_checked_pixels[x_pos + j][y_pos + i]) #TODO: set x, y RELATIVE to the point so they will be easier to access. Point to the actual Pixel object too. Use all_checked_pixels because a point is not guaranteed to be on the page.
         return valid_neighbors
 
     # Taken from TrainingMaskGenerator's implementation
