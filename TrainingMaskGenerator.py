@@ -68,6 +68,8 @@ class TrainingMaskGenerator:
             visited = []
             start_pts = []
             im = cv2.imread(self.img_path + slice_num + ".tif")
+
+            #Filter step: remove points that are on voxels that are too dark/light according to the threshold values
             for elem in seg_pts[slice]:
                 x = int(elem[0])
                 y = int(elem[1])
@@ -83,6 +85,7 @@ class TrainingMaskGenerator:
 
             avg = int(self.calc_avg_pg_width(start_pts, im))
 
+            #Floodfill step: fill all connected points that pass the threshold checks and are in the bounds specified by avg width of the page.
             while stack:
                 point = stack.pop()
                 visited.append(point[0])
@@ -143,14 +146,6 @@ class TrainingMaskGenerator:
                     if grey_val > self.low_tolerance and grey_val < self.high_tolerance:
                         valid_neighbors.append((x_pos + j, y_pos + i))
         return valid_neighbors
-
-
-    #what distance metric?
-    def calculate_distance_from_origin(self, point, origin):
-        delta_x = abs(point[0] - origin[0])
-        delta_y = abs(point[1] - origin[1])
-        distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
-        return distance
 
     def create_semantic_training_set(self, page_points):
         master = {}
