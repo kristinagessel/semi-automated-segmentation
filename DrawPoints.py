@@ -109,6 +109,58 @@ class Extractor:
                     return path_to_directory + "/" + str(file)
 
 #-------
+'''
+def main():
+    ex = Extractor()
+
+    # page num : seg num
+    pages = {
+        "MS910": {
+            "1": ["20191114132257", 0],  # segmentation #, start slice
+            "2": ["20191125215208", 0],
+            "3": ["20191114133552", 0],
+            "11": ["20191123203022", 0],
+            "?": ["20191126112158", 0],
+            "??": ["20191126122204", 0],
+            "???": ["20191126132825", 0]
+        },
+        "Paris59": {
+            "test": ["20191203113358", 430],  # segmentation #, start slice
+            "stephen1" : ["20190808124935", 725]
+        }
+    }
+
+    object = "Paris59"
+    page = "stephen1"
+    segmentation_number = pages[object][page][0]
+
+    paths = {
+        "MS910": {
+            "high-res": "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/",
+            "low-res": "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/",
+            "pointset": "/Volumes/Research/1. Research/MS910.volpkg/paths/" + segmentation_number,
+            "save": "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/"
+        },
+        "Paris59": {
+            "high-res": "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/volumes/20190910090730/",
+            "pointset": "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/paths/" + segmentation_number,
+            "save": "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/Paris59/"
+        }
+    }
+
+    start_slice = pages[object][page][1]
+    num_iterations = 15
+
+    volume_path = paths[object]["high-res"]
+    pointset_path = paths[object]["pointset"]
+    save_path = paths[object]["save"]
+
+    output_dictionary = {}
+    output_dictionary = vr.VCPSReader(pointset_path + "/pointset.vcps").process_VCPS_file(output_dictionary)
+    points_of_interest = output_dictionary[start_slice]
+    ex.write_to_txt_file(output_dictionary, page)
+    ex.draw_on_img(ex.get_path_to_slice(start_slice, volume_path), start_slice, points_of_interest, page, INCLUDE_TEARS)
+'''
 
 def main():
     path_to_volumetric_data = HI_RES_PATH
