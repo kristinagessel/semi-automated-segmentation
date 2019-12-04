@@ -10,10 +10,6 @@ Given an original slice and an original pointset tracing a single page through t
 Use Voronoi diagrams to find the skeleton in the center of the page, then seed those points on the next slice (if they are on a page?)
 Might want a faster way to skeletonize, or perhaps a different approach altogether?
 '''
-PATH_TO_VOLUME = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/"
-PATH_TO_POINTSETS = ""
-PATH_TO_SAVE_LOCATION = "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/"
-
 class Voxel:
     def __init__(self, x, y):
         self.x = x
@@ -46,7 +42,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 65
+        self.low_tolerance = 45#65
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -69,7 +65,7 @@ class MaskExtrapolator:
 
         self.flood_fill_data = {}
 
-        print("Doing flood fill for 10 slices...")
+        print("Doing flood fill for ", num_iterations, " slices...")
         #Do flood fill for this slice
         #10 times for now to test
         for i in range(num_iterations):
@@ -147,12 +143,14 @@ class MaskExtrapolator:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
 
+        #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
-        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(avg) + ".tif", im)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(avg) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
 
         skeleton, img = self.skeletonize(visited, orig_im.copy())
 
+        #Save an image showing the skeleton itself for debugging purposes
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_skeleton" + ".tif", img)
@@ -168,16 +166,10 @@ class MaskExtrapolator:
     def skeletonize(self, points, img):
         #skeleton, img = self.thin_cloud(15, img)
         #skeleton, img = self.do_bfs(self.set_voxels, img)
-        #TODO: first clean the point cloud to eliminate non-connected single voxels (so A* doesn't pick those as start/end points)
         skeleton, img = self.do_a_star(self.set_voxels, img)
+
         for vx in skeleton:
             img[vx[1]][vx[0]] = (0, 255, 0)
-        #First: get all the active/set points that are not completely surrounded by active/set neighbors.
-        #un-set those points.
-        #add their neighbors to the next round's 'stack'?
-        #repeat for a specified depth, or until every remaining pixel has two or fewer set/active neighbors?
-        #remove remaining pixels with no set/active neighbors?
-
         return skeleton, img
 
     def do_bfs(self, point_cloud, img):
@@ -196,12 +188,17 @@ class MaskExtrapolator:
 
         #Do BFS using set_voxels as the traversable points from min y until we reach max y
         #return this path as the skeleton
-        #TODO: or A*? (Euclidean heuristic?) or just Greedy BFS since there's not much to confuse it?
 
         return point_cloud, img #TODO: fix later
-        #TODO: what if the path is broken... try to maximize y?
 
-    #TODO: handle breaks in the page
+    #TODO: what if the path is broken... try to maximize y?
+    #TODO: really probably need A* to only look at voxels that are covered by the floodfill, but the problem is the breakage. Need to find a way to expand the fill to make a continuous curve.
+    #TODO: let the weight for a move be based on the number of surrounding inactive voxels? (Higher weight if there are inactive neighbors?)
+    '''
+    Important note: A* will only work if it can find a path from the start point to the end point. 
+    This A* implementation searches along the actual image, not the mask, to try and improve the chances of finding a path (the threshold is dropped to make it less picky.)
+    Sometimes this fails quite spectacularly, though. A* won't find a path if a complete tear in the page exists.
+    '''
     def do_a_star(self, point_cloud, img):
         #Get all the set voxels in a form where we just have their (x,y) position
         set_voxels = []
@@ -223,20 +220,22 @@ class MaskExtrapolator:
         list_of_moves.append((min_y, min_y, 0, 0)) #(current location, parent location, g, f)
         #fixed cost of 1 for every move--no move is weighted more than another
         while current_pos[0] != max_y: #TODO: does this compare value or the actual object? check
+            #if len(list_of_moves) > 0: # if a possible move exists and it isn't completely exhausted
             current_pos = list_of_moves.pop(0) #Take the top move and do it
+            #else: #If we're out of moves and haven't reached the goal, we're stuck. There's a tear or something.
+            #    return skeleton, img
             visited_voxels.append(current_pos)
             x = [-1, 0, 1]
             y = [-1, 0, 1]
             for i in y:  # height
                 for j in x:  # width
-                    if (i != 0 or j != 0) and (img[int(current_pos[0][1] + i)][int(current_pos[0][0] + j)][0] > self.low_tolerance): #check that the neighbor is a valid grey level to be set
+                    if (i != 0 or j != 0) and (img[int(current_pos[0][1] + i)][int(current_pos[0][0] + j)][0] > self.low_tolerance-20): #check that the neighbor is a valid grey level to be set
                         tmp_pos = tuple(((current_pos[0][0] + j, current_pos[0][1] + i), current_pos[0], current_pos[2]+1, self.calculate_f(max_y, (current_pos[0][0] + j, current_pos[0][1] + i), current_pos)))
                         if tmp_pos not in visited_voxels:
                             if self.dest_not_visited(tmp_pos[0], visited_voxels) or tmp_pos[3] < self.get_f_of_existing(tmp_pos, visited_voxels):
                                 if not tmp_pos[3] >= self.get_f_of_existing(tmp_pos, list_of_moves) or self.get_f_of_existing(tmp_pos, list_of_moves) == -1:
                                     list_of_moves.append(tmp_pos)
             list_of_moves.sort(key=lambda x:x[3]) #Sort by f value so we pick the smallest f every time
-        #Do a* with Euclidean distance calculations
         skeleton.append(current_pos[0])
         skeleton = self.find_shortest_path(skeleton, visited_voxels, max_y, min_y)
         return skeleton, img
@@ -248,7 +247,7 @@ class MaskExtrapolator:
     #Travel from the goal to the start, generating the shortest path found by the algorithm.
     def find_shortest_path(self, skeleton, node_relationships, goal, start):
         current_location = goal
-        pathComplete = False  # flag
+        pathComplete = False
         while (pathComplete is False):
             # find current_location in the list of tuples as a destination
             # add the 'source' to the shortest_path
@@ -291,51 +290,11 @@ class MaskExtrapolator:
     '''
 
     '''
-    This does not work well.
-    Utilize all_checked_voxels and set_voxels dictionaries to determine the outermost points.
-    Unset those outermost points, and keep doing that to the new outermost points until you reach a desired number of iterations/thickness.
-    Send an 'unset' command to all voxels who have at least one voxel neighbor that is not set as part of the page. Then do it again, and again until ^
-    Inputs: 
-        number of iterations to thin the cloud
-        the image to draw the intermediates on
+    Create a skeleton by thinning the point cloud mask that we have.
     '''
     def thin_cloud(self, iterations, img):
-        #get the difference between all_checked_voxels and set_voxels?
-        complete_set = []
-        for key in self.all_checked_voxels.keys():
-            for key2 in self.all_checked_voxels[key].keys():
-                complete_set.append((key, key2))
+        return 0 #TODO
 
-        set_set = []
-        for key in self.set_voxels.keys():
-            for key2 in self.set_voxels[key].keys():
-                set_set.append((key, key2))
-        #For now, these are just all 'non-page' voxels. No thinning done yet
-        inactive_bound_voxels = set(complete_set) - set(set_set)
-
-        voxels_to_deactivate = []
-        for i in range(0, iterations):
-            #Now we have the voxels that we checked but they weren't within the grey threshold. Find the active voxels who have any of these as a neighbor. These will be our outermost boundary voxels. (hopefully)
-            for x in self.set_voxels:
-                for y in self.set_voxels[x]:
-                    voxel = self.set_voxels[x][y]
-                    neighbors = set(voxel.neighbors)
-                    inactive_neighbors = inactive_bound_voxels.intersection(neighbors)
-                    if len(inactive_neighbors) > 0: #if any inactive neighbors exist, we want to de-activate this voxel.
-                        voxels_to_deactivate.append((x, y)) #TODO: do we want to deactivate them after the fact and loop through again? Or?
-            for vx in voxels_to_deactivate:
-                inactive_bound_voxels.add((vx[0], vx[1]))
-        #get all the set voxels in a format that's going to be nicer to work with (and now that we've deactivated some voxels, we can't re-use what we did above)
-        active_voxels = set(set_set) - set(voxels_to_deactivate)
-        print("Removed ", len(set_set) - len(active_voxels), " voxels. Total remaining: ", len(active_voxels))
-        return active_voxels, img
-
-
-    '''
-    Use Voronoi diagrams to find the skeleton in the center of the page.
-    '''
-    def get_voronoi_skeleton(self, slice_pts):
-        return 0  # TODO
 
     #Taken from TrainingMaskGenerator's implementation
     def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
@@ -349,8 +308,6 @@ class MaskExtrapolator:
                 if (i != 0 or j != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(voxel[0], voxel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
                     grey_val = im[y_pos + i][x_pos + j][0]
 
-                    #TODO: below line does not work
-                    #if (x_pos + j) not in self.all_checked_pixels or (y_pos + i) not in self.all_checked_pixels[x_pos + j]: #If this exact point has not been checked before, check it.
                     if (x_pos + j) not in self.all_checked_voxels:
                         self.all_checked_voxels[x_pos + j] = {}
                     self.all_checked_voxels[x_pos + j][y_pos + i] = Voxel(x_pos + j, y_pos + i)
@@ -361,21 +318,14 @@ class MaskExtrapolator:
                         self.all_checked_voxels[x_pos + j][y_pos + i].set() #since it fits in the tolerances, this pixel will be active.
                         self.set_voxels[x_pos + j][y_pos + i] = self.all_checked_voxels[x_pos + j][y_pos + i]
                         valid_neighbors.append((x_pos + j, y_pos + i))
-
-                        #At this indentation level, there should exist voxels (on the outside of the cloud) that do not have 8 neighbors
-                #At this indentation level, all voxels should have 8 neighbors
                 if i != 0 or j != 0:
-                    self.set_voxels[x_pos][y_pos].set_neighbor(x_pos + j, y_pos + i) #TODO: set x, y RELATIVE to the point so they will be easier to access. Point to the actual Pixel object too. Use all_checked_pixels because a point is not guaranteed to be on the page.
+                    self.set_voxels[x_pos][y_pos].set_neighbor(x_pos + j, y_pos + i)
         return valid_neighbors
 
     # Taken from TrainingMaskGenerator's implementation
     #what distance metric? Right now--Euclidean
     def calculate_distance_from_origin(self, point, origin):
         return self.get_euclidean_dist_from_goal(point, origin)
-        '''delta_x = abs(point[0] - origin[0])
-        delta_y = abs(point[1] - origin[1])
-        distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
-        return distance'''
 
     #Taken from TrainingMaskGenerator's implementation
     #TODO: improve on this. The complex shape of the pages means this doesn't work too well.
@@ -409,19 +359,45 @@ class MaskExtrapolator:
 
 #page num : seg num
 pages = {
-    "1" : "20191114132257",
-    "2" : "20191125215208",
-    "3" : "20191114133552",
-    "11" : "20191123203022"
+    "MS910": {
+    "1" : ["20191114132257", 0],  #segmentation #, start slice
+    "2" : ["20191125215208", 0],
+    "3" : ["20191114133552", 0],
+    "11" : ["20191123203022", 0],
+    "?" : ["20191126112158", 0],
+    "??" : ["20191126122204", 0],
+    "???" : ["20191126132825", 0]
+    },
+    "Paris59": {
+        "test" : ["20191204123934", 430], #segmentation #, start slice
+        "test2" : ["20191204125435", 100] #segmentation #, start slice
+    }
 }
-HI_RES_PATH = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/"
-#LOW_RES_PATH = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/"
-page = "2"
-segmentation_number = pages[page]
-pointset_path = "/Volumes/Research/1. Research/MS910.volpkg/paths/" + segmentation_number
-save_path = "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/"
-start_slice = 0
-num_iterations = 30
+
+object = "Paris59"
+page = "test2"
+segmentation_number = pages[object][page][0]
+
+paths = {
+    "MS910": {
+        "high-res" : "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/",
+        "low-res" : "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/",
+        "pointset" : "/Volumes/Research/1. Research/MS910.volpkg/paths/" + segmentation_number,
+        "save" : "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/"
+    },
+    "Paris59": {
+        "high-res" : "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/volumes/20190910090730/",
+        "pointset" : "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/paths/" + segmentation_number,
+        "save" : "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/Paris59/"
+    }
+}
 
 
-ex = MaskExtrapolator(HI_RES_PATH, pointset_path, page, save_path, start_slice, num_iterations)
+start_slice = pages[object][page][1]
+num_iterations = 15
+
+volume_path = paths[object]["high-res"]
+pointset_path = paths[object]["pointset"]
+save_path = paths[object]["save"]
+
+ex = MaskExtrapolator(volume_path, pointset_path, page, save_path, start_slice, num_iterations)
