@@ -42,7 +42,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 45#65
+        self.low_tolerance = 35#65
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -172,25 +172,6 @@ class MaskExtrapolator:
             img[vx[1]][vx[0]] = (0, 255, 0)
         return skeleton, img
 
-    def do_bfs(self, point_cloud, img):
-        #Get all the set voxels in a form where we just have their (x,y) position
-        set_voxels = []
-        for key in self.set_voxels.keys():
-            for key2 in self.set_voxels[key].keys():
-                set_voxels.append((key, key2))
-                #(x, y)
-
-        #Find tuple containing min y
-        min_y = min(set_voxels, key=lambda t: t[1])
-
-        #Find tuple containing max y
-        max_y = max(set_voxels, key=lambda t: t[1])
-
-        #Do BFS using set_voxels as the traversable points from min y until we reach max y
-        #return this path as the skeleton
-
-        return point_cloud, img #TODO: fix later
-
     #TODO: what if the path is broken... try to maximize y?
     #TODO: really probably need A* to only look at voxels that are covered by the floodfill, but the problem is the breakage. Need to find a way to expand the fill to make a continuous curve.
     #TODO: let the weight for a move be based on the number of surrounding inactive voxels? (Higher weight if there are inactive neighbors?)
@@ -229,7 +210,7 @@ class MaskExtrapolator:
             y = [-1, 0, 1]
             for i in y:  # height
                 for j in x:  # width
-                    if (i != 0 or j != 0) and (img[int(current_pos[0][1] + i)][int(current_pos[0][0] + j)][0] > self.low_tolerance-20): #check that the neighbor is a valid grey level to be set
+                    if (i != 0 or j != 0) and (img[int(current_pos[0][1] + i)][int(current_pos[0][0] + j)][0] > self.low_tolerance-15): #check that the neighbor is a valid grey level to be set
                         tmp_pos = tuple(((current_pos[0][0] + j, current_pos[0][1] + i), current_pos[0], current_pos[2]+1, self.calculate_f(max_y, (current_pos[0][0] + j, current_pos[0][1] + i), current_pos)))
                         if tmp_pos not in visited_voxels:
                             if self.dest_not_visited(tmp_pos[0], visited_voxels) or tmp_pos[3] < self.get_f_of_existing(tmp_pos, visited_voxels):
@@ -357,7 +338,7 @@ class MaskExtrapolator:
 
 #---------------------------------------------------
 
-#page num : seg num
+#page num : [seg #, start slice]
 pages = {
     "MS910": {
     "1" : ["20191114132257", 0],  #segmentation #, start slice
@@ -370,12 +351,16 @@ pages = {
     },
     "Paris59": {
         "test" : ["20191204123934", 430], #segmentation #, start slice
-        "test2" : ["20191204125435", 100] #segmentation #, start slice
+        "test2" : ["20191204125435", 100], #segmentation #, start slice
+        "test3" : ["20191204135310", 100],
+        "test4" : ["20191206191654", 300],
+        "test5" : ["20191206192523", 500],
+        "2ndlayer" : ["2ndlayer", 365]
     }
 }
 
 object = "Paris59"
-page = "test2"
+page = "2ndlayer"
 segmentation_number = pages[object][page][0]
 
 paths = {
@@ -394,7 +379,7 @@ paths = {
 
 
 start_slice = pages[object][page][1]
-num_iterations = 15
+num_iterations = 100
 
 volume_path = paths[object]["high-res"]
 pointset_path = paths[object]["pointset"]
