@@ -42,7 +42,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 35#65
+        self.low_tolerance = 65
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -55,7 +55,7 @@ class MaskExtrapolator:
 
         #Read in the start points
         self.orig_pts = self.read_points(path_to_pointsets)
-        self.pts = self.orig_pts[start_slice].copy()
+        self.fill_pts = self.orig_pts[start_slice].copy()
 
         #Find the slice we'll start with (the first one if multiple were provided)
         self.start_slice = list(self.orig_pts.keys())[0] #the slice for which we have the initial pointset
@@ -69,7 +69,7 @@ class MaskExtrapolator:
         #Do flood fill for this slice
         #10 times for now to test
         for i in range(num_iterations):
-            self.flood_fill_data[self.slice], self.pts, self.slice = self.do_2d_floodfill(self.pts, page, self.slice)
+            self.flood_fill_data[self.slice], self.fill_pts, self.slice = self.do_2d_floodfill(self.fill_pts, page, self.slice)
 
         #Save the final result
         file = open(self.save_path + page + ".txt", "w")
@@ -81,15 +81,6 @@ class MaskExtrapolator:
     def read_points(self, path_to_pointsets):
         start = vr.VCPSReader(path_to_pointsets + "/pointset.vcps").process_VCPS_file({})
         return start
-
-    '''
-    3D Flood Fill
-    Run flood fill on a 'cube' (3x3x2 cube?) containing current slice and next slice.
-    In this way we won't necessarily proceed in a linear way through the slices.
-    Is this practical for this use case? (I'm sure it's good for the masks, not sure about segmenting ahead for a user...)
-    '''
-    def do_3d_floodfill(self, skeleton_pts, page):
-        return 0 #TODO
 
     '''
     2D Flood Fill
@@ -166,10 +157,11 @@ class MaskExtrapolator:
     def skeletonize(self, points, img):
         #skeleton, img = self.thin_cloud(15, img)
         #skeleton, img = self.do_bfs(self.set_voxels, img)
-        skeleton, img = self.do_a_star(self.set_voxels, img)
+        #skeleton, img = self.do_a_star(self.set_voxels, img)
+        skeleton = self.thin_cloud(points)
 
         for vx in skeleton:
-            img[vx[1]][vx[0]] = (0, 255, 0)
+            img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
 
     #TODO: what if the path is broken... try to maximize y?
@@ -272,10 +264,109 @@ class MaskExtrapolator:
 
     '''
     Create a skeleton by thinning the point cloud mask that we have.
+    "A Fast Parallel Algorithm for Thinning Digital Patterns" (Zhang, Suen)
     '''
-    def thin_cloud(self, iterations, img):
-        return 0 #TODO
+    def thin_cloud(self, points):
+        #Need: all the mask points--can get those from self.fill_pts
+        iteration_ctr = 0
+        eliminated_pt_ctr = 0
 
+        # Get a copy of the current points that are part of the mask. We will remove points from skeleton to skeletonize the mask.
+        skeleton = points.copy()
+
+        while True:
+            eliminated_pt_ctr = 0
+
+            for point in skeleton:
+                x_pos = point[0]
+                y_pos = point[1]
+                x = [0, 1, 1, 1, 0, -1, -1, -1]
+                y = [-1, -1, 0, 1, 1, 1, 0, -1]
+                neighbors = []
+
+                #TODO: start from displacement (0, 1) and proceed counter-clockwise? is it necessary to have this exact pattern? The paper's representation is different.
+                for disp in range(0, len(y)-1):  # height
+                        # TODO: check that number types match
+                        if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
+                            # This neighbor is live and part of the mask
+                            neighbors.append(1)
+                        else:
+                            neighbors.append(0)
+
+                #Point is a candidate for deletion if it has <= 6 and >= 2 neighbors.
+                num_live_neighbors = self.get_num_live_neighbors(neighbors)
+
+                #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
+                num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
+
+                #TODO: check subiteration 1
+                if not (tuple((x_pos, y_pos-1)) in skeleton and tuple((x_pos+1, y_pos)) in skeleton and tuple((x_pos, y_pos+1)) in skeleton):
+                    if not(tuple((x_pos+1, y_pos)) in skeleton and tuple((x_pos, y_pos+1)) in skeleton and tuple((x_pos-1, y_pos)) in skeleton):
+                        if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
+                            #TODO: if point satisfies all of these it should be eliminated; eliminate it now from skeleton. Not doing the matrix subtraction because what I have isn't in a suitable form to do that.
+                            skeleton.remove(point)
+                            eliminated_pt_ctr += 1
+            if eliminated_pt_ctr == 0:
+                break
+            eliminated_pt_ctr = 0 #TODO: does this help anything?
+
+
+            #subiteration 2
+            for point in skeleton:
+                x_pos = point[0]
+                y_pos = point[1]
+                x = [0, 1, 1, 1, 0, -1, -1, -1]
+                y = [-1, -1, 0, 1, 1, 1, 0, -1]
+                neighbors = []
+
+                #TODO: start from displacement (0, 1) and proceed counter-clockwise? is it necessary to have this exact pattern? The paper's representation is different.
+                for disp in range(0, len(y)-1):  # height
+                        # TODO: check that number types match
+                        if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
+                            # This neighbor is live and part of the mask
+                            neighbors.append(1)
+                        else:
+                            neighbors.append(0)
+
+                #Point is a candidate for deletion if it has <= 6 and >= 2 neighbors.
+                num_live_neighbors = self.get_num_live_neighbors(neighbors)
+
+                #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
+                num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
+
+                #TODO: check subiteration 2
+                if not (tuple((x_pos, y_pos-1)) in skeleton and tuple((x_pos+1, y_pos)) in skeleton and tuple((x_pos-1, y_pos)) in skeleton):
+                    if not(tuple((x_pos, y_pos-1)) in skeleton and tuple((x_pos, y_pos+1)) in skeleton and tuple((x_pos-1, y_pos)) in skeleton):
+                        if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
+                            #TODO: if point satisfies all of these it should be eliminated; eliminate it now from skeleton. Not doing the matrix subtraction because what I have isn't in a suitable form to do that.
+                            skeleton.remove(point)
+                            eliminated_pt_ctr += 1
+            if eliminated_pt_ctr == 0:
+                break
+
+        return skeleton
+
+    '''
+    Get how many 01 patterns (not live, live) exist in the ordered set of neighbors, starting from the center top and moving clockwise
+    '''
+    def get_zero_one_patterns(self, neighbors):
+        zero_one_ctr = 0
+        for elem in range(0, len(neighbors)-1):
+            if neighbors[elem] == 0 and elem < len(neighbors)-1:
+                if neighbors[elem+1] == 1:
+                    zero_one_ctr += 1
+        return zero_one_ctr
+
+    '''
+    How many neighbors does a given point (that is part of the mask) have which are also part of the mask?
+    '''
+    def get_num_live_neighbors(self, neighbor_list):
+        neighbor_ctr = 0
+        for elem in neighbor_list:
+            #If it's a 'live' neighbor (value 1) count it
+            if elem:
+                neighbor_ctr += 1
+        return neighbor_ctr
 
     #Taken from TrainingMaskGenerator's implementation
     def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
@@ -359,8 +450,8 @@ pages = {
     }
 }
 
-object = "Paris59"
-page = "2ndlayer"
+object = "MS910"
+page = "?"
 segmentation_number = pages[object][page][0]
 
 paths = {
