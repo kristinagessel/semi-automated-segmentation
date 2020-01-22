@@ -4,6 +4,7 @@ import cv2
 import os
 import math
 import numpy as np
+
 '''
 Given an original slice and an original pointset tracing a single page through the slice, extrapolate in 3D to subsequent slices.
 3D floodfill as a start?
@@ -158,7 +159,7 @@ class MaskExtrapolator:
         #skeleton, img = self.thin_cloud(15, img)
         #skeleton, img = self.do_bfs(self.set_voxels, img)
         #skeleton, img = self.do_a_star(self.set_voxels, img)
-        skeleton = self.thin_cloud(points)
+        skeleton = self.thin_cloud_zhang_suen(points)
 
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
@@ -266,7 +267,7 @@ class MaskExtrapolator:
     Create a skeleton by thinning the point cloud mask that we have.
     "A Fast Parallel Algorithm for Thinning Digital Patterns" (Zhang, Suen)
     '''
-    def thin_cloud(self, points):
+    def thin_cloud_zhang_suen(self, points):
         #Need: all the mask points--can get those from self.fill_pts
         iteration_ctr = 0
         eliminated_pt_ctr = 0
@@ -275,18 +276,60 @@ class MaskExtrapolator:
         skeleton = points.copy()
 
         while True:
+            print("Iteration ", iteration_ctr)
+            iteration_ctr += 1
+            eliminated_pt_ctr = 0
+            points_to_remove = []
+
+            #Subiteration 1: (Remove SE boundary and NW corner points)
+            for point in skeleton:
+                x_pos = point[0]
+                y_pos = point[1]
+                x = [0, 1, 1, 1, 0, -1, -1, -1]
+                y = [1, 1, 0, -1, -1, -1, 0, 1]
+                neighbors = []
+
+                #start from displacement (0, 1) and proceed counter-clockwise.
+                for disp in range(0, len(y)):  # height
+                        if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
+                            # This neighbor is live and part of the mask
+                            neighbors.append(1)
+                        else:
+                            neighbors.append(0)
+
+                #Point is a candidate for deletion if it has <= 6 and >= 2 neighbors.
+                num_live_neighbors = self.get_num_live_neighbors(neighbors)
+
+                #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
+                num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
+
+                # P2 * P4 * P6 = 0
+                if not (tuple((x_pos, y_pos+1)) in skeleton) or not (tuple((x_pos+1, y_pos)) in skeleton) or not (tuple((x_pos, y_pos-1)) in skeleton):
+                    # P4 * P6 * P8 = 0
+                    if not (tuple((x_pos+1, y_pos)) in skeleton) or not (tuple((x_pos, y_pos-1)) in skeleton) or not (tuple((x_pos-1, y_pos)) in skeleton):
+                        if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
+                            #if point satisfies all of these it should be eliminated; add it to a list to be eliminated.
+                            points_to_remove.append(point)
+                            eliminated_pt_ctr += 1
+            if eliminated_pt_ctr == 0:
+                break
             eliminated_pt_ctr = 0
 
+            for point in points_to_remove:
+                skeleton.remove(point)
+            print("Removed ", len(points_to_remove), " points in this subiteration.")
+            points_to_remove = []
+
+            #Subiteration 2: (Remove NW boundary and SE corner points)
             for point in skeleton:
                 x_pos = point[0]
                 y_pos = point[1]
                 x = [0, 1, 1, 1, 0, -1, -1, -1]
-                y = [-1, -1, 0, 1, 1, 1, 0, -1]
+                y = [1, 1, 0, -1, -1, -1, 0, 1]
                 neighbors = []
 
-                #TODO: start from displacement (0, 1) and proceed counter-clockwise? is it necessary to have this exact pattern? The paper's representation is different.
-                for disp in range(0, len(y)-1):  # height
-                        # TODO: check that number types match
+                #start from displacement (0, 1) and proceed counter-clockwise
+                for disp in range(0, len(y)):  # height
                         if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
                             # This neighbor is live and part of the mask
                             neighbors.append(1)
@@ -299,51 +342,23 @@ class MaskExtrapolator:
                 #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
                 num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
 
-                #TODO: check subiteration 1
-                if not (tuple((x_pos, y_pos-1)) in skeleton and tuple((x_pos+1, y_pos)) in skeleton and tuple((x_pos, y_pos+1)) in skeleton):
-                    if not(tuple((x_pos+1, y_pos)) in skeleton and tuple((x_pos, y_pos+1)) in skeleton and tuple((x_pos-1, y_pos)) in skeleton):
+                # P2 * P4 * P8 = 0
+                if not (tuple((x_pos, y_pos+1)) in skeleton) or not (tuple((x_pos+1, y_pos)) in skeleton) or not (tuple((x_pos-1, y_pos)) in skeleton):
+                    # P2 * P6 * P8 = 0
+                    if not(tuple((x_pos, y_pos+1)) in skeleton) or not (tuple((x_pos, y_pos-1)) in skeleton) or not (tuple((x_pos-1, y_pos)) in skeleton):
                         if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
-                            #TODO: if point satisfies all of these it should be eliminated; eliminate it now from skeleton. Not doing the matrix subtraction because what I have isn't in a suitable form to do that.
-                            skeleton.remove(point)
-                            eliminated_pt_ctr += 1
-            if eliminated_pt_ctr == 0:
-                break
-            eliminated_pt_ctr = 0 #TODO: does this help anything?
-
-
-            #subiteration 2
-            for point in skeleton:
-                x_pos = point[0]
-                y_pos = point[1]
-                x = [0, 1, 1, 1, 0, -1, -1, -1]
-                y = [-1, -1, 0, 1, 1, 1, 0, -1]
-                neighbors = []
-
-                #TODO: start from displacement (0, 1) and proceed counter-clockwise? is it necessary to have this exact pattern? The paper's representation is different.
-                for disp in range(0, len(y)-1):  # height
-                        # TODO: check that number types match
-                        if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
-                            # This neighbor is live and part of the mask
-                            neighbors.append(1)
-                        else:
-                            neighbors.append(0)
-
-                #Point is a candidate for deletion if it has <= 6 and >= 2 neighbors.
-                num_live_neighbors = self.get_num_live_neighbors(neighbors)
-
-                #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
-                num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
-
-                #TODO: check subiteration 2
-                if not (tuple((x_pos, y_pos-1)) in skeleton and tuple((x_pos+1, y_pos)) in skeleton and tuple((x_pos-1, y_pos)) in skeleton):
-                    if not(tuple((x_pos, y_pos-1)) in skeleton and tuple((x_pos, y_pos+1)) in skeleton and tuple((x_pos-1, y_pos)) in skeleton):
-                        if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
-                            #TODO: if point satisfies all of these it should be eliminated; eliminate it now from skeleton. Not doing the matrix subtraction because what I have isn't in a suitable form to do that.
-                            skeleton.remove(point)
+                            #if point satisfies all of these it should be eliminated; add it to a list to be eliminated.
+                            points_to_remove.append(point)
                             eliminated_pt_ctr += 1
             if eliminated_pt_ctr == 0:
                 break
 
+            for point in points_to_remove:
+                skeleton.remove(point)
+            print("Removed ", len(points_to_remove), " points in this subiteration.")
+
+        #TODO: prune the skeleton
+        skeleton = self.prune_skeleton(skeleton)
         return skeleton
 
     '''
@@ -351,8 +366,8 @@ class MaskExtrapolator:
     '''
     def get_zero_one_patterns(self, neighbors):
         zero_one_ctr = 0
-        for elem in range(0, len(neighbors)-1):
-            if neighbors[elem] == 0 and elem < len(neighbors)-1:
+        for elem in range(0, len(neighbors)):
+            if neighbors[elem] == 0 and elem+1 < len(neighbors):
                 if neighbors[elem+1] == 1:
                     zero_one_ctr += 1
         return zero_one_ctr
@@ -364,9 +379,15 @@ class MaskExtrapolator:
         neighbor_ctr = 0
         for elem in neighbor_list:
             #If it's a 'live' neighbor (value 1) count it
-            if elem:
+            if elem == 1:
                 neighbor_ctr += 1
         return neighbor_ctr
+
+    '''
+    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
+    '''
+    def prune_skeleton(self, skeleton):
+        return skeleton #TODO
 
     #Taken from TrainingMaskGenerator's implementation
     def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
@@ -470,7 +491,7 @@ paths = {
 
 
 start_slice = pages[object][page][1]
-num_iterations = 100
+num_iterations = 300
 
 volume_path = paths[object]["high-res"]
 pointset_path = paths[object]["pointset"]
