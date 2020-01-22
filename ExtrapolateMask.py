@@ -11,26 +11,6 @@ Given an original slice and an original pointset tracing a single page through t
 Use Voronoi diagrams to find the skeleton in the center of the page, then seed those points on the next slice (if they are on a page?)
 Might want a faster way to skeletonize, or perhaps a different approach altogether?
 '''
-class Voxel:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.is_set = False
-        self.neighbors = []
-        '''
-        Store neighbors' x, y coordinates. Not full references, because those get messy.
-        Do we need to know in what direction the neighbor is from this original voxel?
-        '''
-
-    def set_neighbor(self, neighbor_x, neighbor_y):
-        if (neighbor_x, neighbor_y) not in self.neighbors:
-            self.neighbors.append((neighbor_x, neighbor_y))
-
-    def set(self):
-        self.is_set = True
-
-    def unset(self):
-        self.is_set = False
 
 '''
 Scenario:
@@ -99,24 +79,17 @@ class MaskExtrapolator:
         start_pts = []
         orig_im = cv2.imread(self.img_path + slice_num + ".tif")  # open the image of this slice
         im = orig_im.copy()
-        self.set_voxels = {} #Re-initialize them to clear out prior slice data
-        self.all_checked_voxels = {}
 
         #Filter Step: Remove points from the prior page skeleton that are now on too dark/light voxels according to the threshold.
         for elem in skeleton_pts:
             x = int(elem[0])
             y = int(elem[1])
             voxel = im[y][x][0]
-            if x not in self.all_checked_voxels:
-                self.all_checked_voxels[x] = {}
-            self.all_checked_voxels[x][y] = Voxel(x, y)
 
             if (voxel > self.low_tolerance):# and voxel < self.high_tolerance):  # check for tears and bright spots (minerals?)
                 stack.append([(x, y), (x, y)])  # append a tuple of ((point), (origin point)) to keep track of how far we are from the original point
                 if x not in self.set_voxels:
                     self.set_voxels[x] = {}
-                self.all_checked_voxels[x][y].set() # Set as a valid page
-                self.set_voxels[x][y] = self.all_checked_voxels[x][y]
                 start_pts.append((x, y))
 
         height, width, channel = im.shape #grab the image properties for bounds checking later
@@ -400,19 +373,8 @@ class MaskExtrapolator:
             for j in x: #width
                 if (i != 0 or j != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(voxel[0], voxel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
                     grey_val = im[y_pos + i][x_pos + j][0]
-
-                    if (x_pos + j) not in self.all_checked_voxels:
-                        self.all_checked_voxels[x_pos + j] = {}
-                    self.all_checked_voxels[x_pos + j][y_pos + i] = Voxel(x_pos + j, y_pos + i)
-
                     if grey_val > self.low_tolerance: #and grey_val < self.high_tolerance:
-                        if (x_pos + j) not in self.set_voxels:
-                            self.set_voxels[x_pos + j] = {}
-                        self.all_checked_voxels[x_pos + j][y_pos + i].set() #since it fits in the tolerances, this pixel will be active.
-                        self.set_voxels[x_pos + j][y_pos + i] = self.all_checked_voxels[x_pos + j][y_pos + i]
                         valid_neighbors.append((x_pos + j, y_pos + i))
-                if i != 0 or j != 0:
-                    self.set_voxels[x_pos][y_pos].set_neighbor(x_pos + j, y_pos + i)
         return valid_neighbors
 
     # Taken from TrainingMaskGenerator's implementation
