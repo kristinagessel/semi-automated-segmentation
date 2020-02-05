@@ -178,7 +178,7 @@ class TrainingMaskGenerator:
                 pg_colors[page] = color
             else:
                 while color in pg_colors:
-                    color = tuple(np.random.choice(range(256), size=3) * 256)
+                    color = tuple(np.random.choice(range(256), size=3))
 
             #put all the points into the master dictionary in the format we want
             for slice in page_points[page]:
