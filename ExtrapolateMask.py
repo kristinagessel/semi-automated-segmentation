@@ -134,6 +134,7 @@ class MaskExtrapolator:
         #skeleton, img = self.do_a_star(img)
         #skeleton = self.thin_cloud_zhang_suen(points)
         skeleton = self.thin_cloud_continuous(points)
+        skeleton = self.prune_skeleton(skeleton)
 
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
@@ -240,6 +241,8 @@ class MaskExtrapolator:
     This procedure erodes away the boundaries of foreground objects as much as possible, but does not affect pixels at the ends of lines.
     
     Thin cloud to get a skeleton and produce a continuous skeleton.
+    
+    Implementation given in section 8.6 of "Computer Vision", 5th Edition, by E.R. Davies
     '''
     def thin_cloud_continuous(self, points):
         skeleton = points.copy()
@@ -249,7 +252,7 @@ class MaskExtrapolator:
             skeleton, thinned_s = self.strip_south_pts(skeleton)
             skeleton, thinned_e = self.strip_east_pts(skeleton)
             skeleton, thinned_w = self.strip_west_pts(skeleton)
-            #If no thinning occurred, we are finished.
+            #If no thinning occurred in this last iteration, we are finished.
             if not(thinned_n or thinned_s or thinned_e or thinned_w):
                 break
 
@@ -262,27 +265,30 @@ class MaskExtrapolator:
             #get neighbors we care about: (x, y+1) and (x, y-1)
             x = point[0]
             y = point[1]
+
+            A1 = int(tuple((x, y + 1)) in mask)
+            A2 = int(tuple((x+1, y+1)) in mask)
+            A3 = int(tuple((x + 1, y)) in mask)
+            A4 = int(tuple((x+1, y-1)) in mask)
+            A5 = int(tuple((x, y - 1)) in mask)
+            A6 = int(tuple((x-1, y-1)) in mask)
+            A7 = int(tuple((x-1, y)) in mask)
+            A8 = int(tuple((x-1, y+1)) in mask)
+
             #calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
-                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
-                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
-                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
-                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+            #No need to cast to int?
+            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
             sigma = self.calculate_sigma(point, mask)
 
             #check if chi == 2 and sigma != 1:
             #(implied that center pixel is active if it's in the mask, so no need to check)
             if chi == 2 and sigma != 1:
-                if tuple((x, y+1)) in mask:
-                    if mask[mask.index(tuple((x, y+1)))] == 0:
-                        if tuple((x, y-1)) in mask:
-                            if mask[mask.index(tuple((x, y - 1)))] == 1:
+                if tuple((x, y+1)) not in mask: #i.e. it's 0
+                        if tuple((x, y-1)) in mask: #i.e. it's 1
                                 #remove the pixel from the mask
                                 points_to_remove.append(point)
                                 thinned = True
+        print("Removing ", len(points_to_remove), " points.")
         for point in points_to_remove:
             mask.remove(point)
         return mask, thinned
@@ -294,27 +300,30 @@ class MaskExtrapolator:
             #get neighbors we care about: (x, y+1) and (x, y-1)
             x = point[0]
             y = point[1]
+
+            A1 = int(tuple((x, y + 1)) in mask)
+            A2 = int(tuple((x+1, y+1)) in mask)
+            A3 = int(tuple((x + 1, y)) in mask)
+            A4 = int(tuple((x+1, y-1)) in mask)
+            A5 = int(tuple((x, y - 1)) in mask)
+            A6 = int(tuple((x-1, y-1)) in mask)
+            A7 = int(tuple((x-1, y)) in mask)
+            A8 = int(tuple((x-1, y+1)) in mask)
+
             #calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
-                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
-                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
-                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
-                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+            #No need to cast to int?
+            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
             sigma = self.calculate_sigma(point, mask)
 
             #check if chi == 2 and sigma != 1:
             #(implied that center pixel is active if it's in the mask, so no need to check)
             if chi == 2 and sigma != 1:
-                if tuple((x, y-1)) in mask:
-                    if mask[mask.index(tuple((x, y-1)))] == 0:
-                        if tuple((x, y+1)) in mask:
-                            if mask[mask.index(tuple((x, y + 1)))] == 1:
-                                #remove the pixel from the mask
-                                points_to_remove.append(point)
-                                thinned = True
+                if tuple((x, y-1)) not in mask:
+                    if tuple((x, y+1)) in mask:
+                        #remove the pixel from the mask
+                        points_to_remove.append(point)
+                        thinned = True
+        print("Removing ", len(points_to_remove), " points.")
         for point in points_to_remove:
             mask.remove(point)
         return mask, thinned
@@ -326,27 +335,30 @@ class MaskExtrapolator:
             # get neighbors we care about: (x, y+1) and (x, y-1)
             x = point[0]
             y = point[1]
-            # calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
-                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
-                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
-                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
-                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+
+            A1 = int(tuple((x, y + 1)) in mask)
+            A2 = int(tuple((x+1, y+1)) in mask)
+            A3 = int(tuple((x + 1, y)) in mask)
+            A4 = int(tuple((x+1, y-1)) in mask)
+            A5 = int(tuple((x, y - 1)) in mask)
+            A6 = int(tuple((x-1, y-1)) in mask)
+            A7 = int(tuple((x-1, y)) in mask)
+            A8 = int(tuple((x-1, y+1)) in mask)
+
+            #calculate chi (crossing number) and sigma (number of active neighbors)
+            #No need to cast to int?
+            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
             sigma = self.calculate_sigma(point, mask)
 
             # check if chi == 2 and sigma != 1:
             # (implied that center pixel is active if it's in the mask, so no need to check)
             if chi == 2 and sigma != 1:
-                if tuple((x + 1, y)) in mask:
-                    if mask[mask.index(tuple((x + 1, y)))] == 0:
-                        if tuple((x - 1, y)) in mask:
-                            if mask[mask.index(tuple((x - 1, y)))] == 1:
-                                # remove the pixel from the mask
-                                points_to_remove.append(point)
-                                thinned = True
+                if tuple((x + 1, y)) not in mask:
+                    if tuple((x - 1, y)) in mask:
+                        # remove the pixel from the mask
+                        points_to_remove.append(point)
+                        thinned = True
+        print("Removing ", len(points_to_remove), " points.")
         for point in points_to_remove:
             mask.remove(point)
         return mask, thinned
@@ -358,27 +370,30 @@ class MaskExtrapolator:
             # get neighbors we care about: (x, y+1) and (x, y-1)
             x = point[0]
             y = point[1]
-            # calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
-                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
-                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
-                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
-                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+
+            A1 = int(tuple((x, y + 1)) in mask)
+            A2 = int(tuple((x+1, y+1)) in mask)
+            A3 = int(tuple((x + 1, y)) in mask)
+            A4 = int(tuple((x+1, y-1)) in mask)
+            A5 = int(tuple((x, y - 1)) in mask)
+            A6 = int(tuple((x-1, y-1)) in mask)
+            A7 = int(tuple((x-1, y)) in mask)
+            A8 = int(tuple((x-1, y+1)) in mask)
+
+            #calculate chi (crossing number) and sigma (number of active neighbors)
+            #No need to cast to int?
+            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
             sigma = self.calculate_sigma(point, mask)
 
             # check if chi == 2 and sigma != 1:
             # (implied that center pixel is active if it's in the mask, so no need to check)
             if chi == 2 and sigma != 1:
-                if tuple((x - 1, y)) in mask:
-                    if mask[mask.index(tuple((x - 1, y)))] == 0:
-                        if tuple((x + 1, y)) in mask:
-                            if mask[mask.index(tuple((x + 1, y)))] == 1:
-                                # remove the pixel from the mask
-                                points_to_remove.append(point)
-                                thinned = True
+                if tuple((x - 1, y)) not in mask:
+                    if tuple((x + 1, y)) in mask:
+                        # remove the pixel from the mask
+                        points_to_remove.append(point)
+                        thinned = True
+        print("Removing ", len(points_to_remove), " points.")
         for point in points_to_remove:
             mask.remove(point)
         return mask, thinned
@@ -396,9 +411,12 @@ class MaskExtrapolator:
                         ctr += 1
         return ctr
 
-
-
-
+    '''
+    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
+    '''
+    def prune_skeleton(self, skeleton):
+        #eliminate 'stray' points that slipped by the skeletonization algorithm
+        return skeleton #TODO
 
     '''
     Create a skeleton by thinning the point cloud mask that we have.
@@ -517,12 +535,6 @@ class MaskExtrapolator:
             if elem == 1:
                 neighbor_ctr += 1
         return neighbor_ctr
-
-    '''
-    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
-    '''
-    def prune_skeleton(self, skeleton):
-        return skeleton #TODO
 
     #Taken from TrainingMaskGenerator's implementation
     def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
