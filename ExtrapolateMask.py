@@ -253,7 +253,7 @@ class MaskExtrapolator:
             if not(thinned_n or thinned_s or thinned_e or thinned_w):
                 break
 
-        return points #TODO
+        return skeleton
 
     def strip_north_pts(self, mask):
         thinned = False
@@ -263,10 +263,10 @@ class MaskExtrapolator:
             x = point[0]
             y = point[1]
             #calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int(mask[mask.index(tuple((x, y + 1)))] != mask[mask.index(tuple((x+1, y)))]) + \
-                  int(mask[mask.index(tuple((x+1, y)))] != mask[mask.index(tuple((x, y-1)))]) + \
-                  int(mask[mask.index(tuple((x, y-1)))] != mask[mask.index(tuple((x-1, y)))]) + \
-                  int(mask[mask.index(tuple((x-1, y)))] != mask[mask.index(tuple((x, y+1)))]) + \
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
                   2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
                   int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
                   int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
@@ -285,16 +285,103 @@ class MaskExtrapolator:
                                 thinned = True
         for point in points_to_remove:
             mask.remove(point)
-        return mask, thinned #TODO
+        return mask, thinned
 
     def strip_south_pts(self, mask):
-        return mask, False #TODO
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            #get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            #calculate chi (crossing number) and sigma (number of active neighbors)
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
+                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
+                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
+                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+            sigma = self.calculate_sigma(point, mask)
+
+            #check if chi == 2 and sigma != 1:
+            #(implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x, y-1)) in mask:
+                    if mask[mask.index(tuple((x, y-1)))] == 0:
+                        if tuple((x, y+1)) in mask:
+                            if mask[mask.index(tuple((x, y + 1)))] == 1:
+                                #remove the pixel from the mask
+                                points_to_remove.append(point)
+                                thinned = True
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
 
     def strip_east_pts(self, mask):
-        return mask, False #TODO
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            # get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            # calculate chi (crossing number) and sigma (number of active neighbors)
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
+                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
+                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
+                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+            sigma = self.calculate_sigma(point, mask)
+
+            # check if chi == 2 and sigma != 1:
+            # (implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x + 1, y)) in mask:
+                    if mask[mask.index(tuple((x + 1, y)))] == 0:
+                        if tuple((x - 1, y)) in mask:
+                            if mask[mask.index(tuple((x - 1, y)))] == 1:
+                                # remove the pixel from the mask
+                                points_to_remove.append(point)
+                                thinned = True
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
 
     def strip_west_pts(self, mask):
-        return mask, False #TODO
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            # get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            # calculate chi (crossing number) and sigma (number of active neighbors)
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+                  2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
+                  int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
+                  int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
+                  int(int(tuple((x-1, y+1)) in mask) > int(tuple((x-1, y)) in mask) and int(int(tuple((x-1, y+1)) in mask) > int(tuple((x, y+1)) in mask)))
+            sigma = self.calculate_sigma(point, mask)
+
+            # check if chi == 2 and sigma != 1:
+            # (implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x - 1, y)) in mask:
+                    if mask[mask.index(tuple((x - 1, y)))] == 0:
+                        if tuple((x + 1, y)) in mask:
+                            if mask[mask.index(tuple((x + 1, y)))] == 1:
+                                # remove the pixel from the mask
+                                points_to_remove.append(point)
+                                thinned = True
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
 
     def calculate_sigma(self, point, mask):
         row = [0, 1, -1]
