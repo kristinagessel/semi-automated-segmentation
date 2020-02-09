@@ -263,10 +263,10 @@ class MaskExtrapolator:
             x = point[0]
             y = point[1]
             #calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
                   2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
                   int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
                   int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
@@ -295,10 +295,10 @@ class MaskExtrapolator:
             x = point[0]
             y = point[1]
             #calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
                   2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
                   int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
                   int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
@@ -327,10 +327,10 @@ class MaskExtrapolator:
             x = point[0]
             y = point[1]
             # calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
                   2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
                   int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
                   int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
@@ -359,10 +359,10 @@ class MaskExtrapolator:
             x = point[0]
             y = point[1]
             # calculate chi (crossing number) and sigma (number of active neighbors)
-            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1) in mask) and not(tuple((x + 1, y)) in mask))) + \
-                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y) in mask) and not(tuple((x, y - 1)) in mask))) + \
-                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1) in mask) and not(tuple((x-1, y)) in mask))) + \
-                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y) in mask) and not(tuple((x, y + 1)) in mask))) + \
+            chi = int((not(tuple((x, y + 1)) in mask) and tuple((x+1, y)) in mask) or (tuple((x, y + 1)) in mask) and not(tuple((x + 1, y)) in mask)) + \
+                  int((not(tuple((x + 1, y)) in mask) and (tuple((x, y - 1)) in mask)) or (tuple((x + 1, y)) in mask) and not(tuple((x, y - 1)) in mask)) + \
+                  int((not(tuple((x, y - 1)) in mask) and (tuple((x-1, y)) in mask)) or (tuple((x, y - 1)) in mask) and not(tuple((x-1, y)) in mask)) + \
+                  int((not(tuple((x - 1, y)) in mask) and (tuple((x, y + 1)) in mask)) or (tuple((x - 1, y)) in mask) and not(tuple((x, y + 1)) in mask)) + \
                   2*int(int(tuple((x+1, y+1)) in mask) > int(tuple((x, y+1)) in mask) and int(tuple((x, y+1)) in mask) > int(tuple((x+1, y)) in mask)) + \
                   int(int(tuple((x+1, y-1)) in mask) > int(tuple((x+1, y)) in mask) and int(int(tuple((x+1, y-1)) in mask) > int(tuple((x, y-1)) in mask))) + \
                   int(int(tuple((x-1, y-1)) in mask) > int(tuple((x, y-1)) in mask) and int(int(tuple((x-1, y-1)) in mask) > int(tuple((x-1, y)) in mask))) + \
