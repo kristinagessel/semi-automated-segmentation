@@ -33,7 +33,6 @@ for z in range(0, dataset.shape[2]):
                             color = tuple(np.random.choice(range(256), size=3))
                         pg_colors.append(color)
                         num_color_dict[dataset[x][y][z]] = color
-
                     out_file.write(str(x) + " " + str(y) + " " + str(z) + " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) +"\n")
 
 f.close()

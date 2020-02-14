@@ -41,6 +41,7 @@ def convertJSONToXYZ(path, out_path):
             z += 1
         out_file.close()
 
-convertJSONToXYZ(path_to_raw_pointset_files, path_to_raw_files)
-convertJSONToXYZ(path_to_json_files, path_to_dense_files)
+convertJSONToXYZ("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/", "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/meshlab/")
+#convertJSONToXYZ(path_to_raw_pointset_files, path_to_raw_files)
+#convertJSONToXYZ(path_to_json_files, path_to_dense_files)
 #convertJSONToXYZ("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/", "/Volumes/Research/1. Research/Experiments/meshlab/extrapolate_floodfill/")

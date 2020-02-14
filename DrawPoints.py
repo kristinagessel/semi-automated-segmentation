@@ -3,8 +3,6 @@ import json
 import os
 import cv2
 import re
-import matplotlib.pyplot as plt
-import sys
 
 PATH_TO_OUTPUT_DIR = "/Volumes/Research/1. Research/Experiments/"
 PATH_TO_VOLPKG = "/Volumes/Research/1. Research/"
@@ -34,9 +32,7 @@ class Extractor:
     #slice_num: what slice number is this?
     #points: array of all the points (in tuple format) at that slice number
     def draw_on_img(self, img_path, slice_num, points, page, include_tears):
-        im = cv2.imread(img_path)#Image.open(img_path)
-        #plt.imshow(im)
-        #plt.show()
+        im = cv2.imread(img_path)
         radius = 3
 
         for point in points:
