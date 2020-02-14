@@ -23,7 +23,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 65
+        self.low_tolerance = 35#65
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -45,16 +45,23 @@ class MaskExtrapolator:
         self.slice = start_slice
 
         self.flood_fill_data = {}
+        self.skeleton_data = {}
 
         print("Doing flood fill for ", num_iterations, " slices...")
         #Do flood fill for this slice
         #10 times for now to test
         for i in range(num_iterations):
             self.flood_fill_data[self.slice], self.fill_pts, self.slice = self.do_2d_floodfill(self.fill_pts, page, self.slice)
+            self.skeleton_data[self.slice] = self.fill_pts
 
         #Save the final result
         file = open(self.save_path + page + ".txt", "w")
         ujson.dump(self.flood_fill_data, file, indent=1)
+        file.close()
+        #Save the skeleton in a separate file
+        file = open(self.save_path + page + "_skeleton.txt", "w")
+        ujson.dump(self.flood_fill_data, file, indent=1)
+        file.close()
 
     '''
     Read pointsets.vcps and put the contents into a dictionary.
@@ -134,7 +141,9 @@ class MaskExtrapolator:
         #skeleton, img = self.do_a_star(img)
         #skeleton = self.thin_cloud_zhang_suen(points)
         skeleton = self.thin_cloud_continuous(points)
-        skeleton = self.prune_skeleton(skeleton)
+
+
+        #skeleton = self.prune_skeleton(skeleton)
 
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
@@ -218,7 +227,7 @@ class MaskExtrapolator:
         return True
 
     def calculate_f(self, dest, new_loc, current_loc_tuple):
-        h = self.get_euclidean_dist_from_goal(new_loc, dest)
+        h = self.euclidean_dist(new_loc, dest)
         g = current_loc_tuple[2]+1
         f = g + h
         return f
@@ -226,7 +235,7 @@ class MaskExtrapolator:
     '''
     Calculate the euclidean distance between 2 points
     '''
-    def get_euclidean_dist_from_goal(self, src, dest):
+    def euclidean_dist(self, src, dest):
         delta_x = abs(src[0] - dest[0])
         delta_y = abs(src[1] - dest[1])
         distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
@@ -236,13 +245,13 @@ class MaskExtrapolator:
     '''
 
     '''Morphological Thinning
-    Consider all pixels on the boundaries of foreground regions (i.e. foreground points that have at least one background neighbour). 
-    Delete any such point that has more than one foreground neighbour, as long as doing so does not locally disconnect (i.e. split into two) the region containing that pixel. Iterate until convergence.
-    This procedure erodes away the boundaries of foreground objects as much as possible, but does not affect pixels at the ends of lines.
-    
     Thin cloud to get a skeleton and produce a continuous skeleton.
     
-    Implementation given in section 8.6 of "Computer Vision", 5th Edition, by E.R. Davies
+    This is the basic implementation given in section 8.6.2 of "Computer Vision", 5th Edition, by E.R. Davies
+    On average, it takes 5 minutes to segment a layer. Not good.
+    
+    *****TODO: perhaps try to instead put points into a dictionary like: dict[x][y] for faster lookup? 
+    (Then you just check if x and y exist in dictionary. Maybe it's a little faster?)
     '''
     def thin_cloud_continuous(self, points):
         skeleton = points.copy()
@@ -276,7 +285,7 @@ class MaskExtrapolator:
             A8 = int(tuple((x-1, y+1)) in mask)
 
             #calculate chi (crossing number) and sigma (number of active neighbors)
-            #No need to cast to int?
+            #No need to cast to int, Python can handle this
             chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
             sigma = self.calculate_sigma(point, mask)
 
@@ -554,7 +563,7 @@ class MaskExtrapolator:
     # Taken from TrainingMaskGenerator's implementation
     #what distance metric? Right now--Euclidean
     def calculate_distance_from_origin(self, point, origin):
-        return self.get_euclidean_dist_from_goal(point, origin)
+        return self.euclidean_dist(point, origin)
 
     #Taken from TrainingMaskGenerator's implementation
     #TODO: improve on this. The complex shape of the pages means this doesn't work too well.
@@ -588,7 +597,7 @@ class MaskExtrapolator:
 
 #page num : [seg #, start slice]
 pages = {
-    "MS910": {
+    "MS910": { #Note: grey tolerance 65 works well
     "1" : ["20191114132257", 0],  #segmentation #, start slice
     "2" : ["20191125215208", 0],
     "3" : ["20191114133552", 0],
@@ -597,7 +606,7 @@ pages = {
     "??" : ["20191126122204", 0],
     "???" : ["20191126132825", 0]
     },
-    "Paris59": {
+    "Paris59": { #Note: grey tolerance 35 works well
         "test" : ["20191204123934", 430], #segmentation #, start slice
         "test2" : ["20191204125435", 100], #segmentation #, start slice
         "test3" : ["20191204135310", 100],
@@ -607,8 +616,8 @@ pages = {
     }
 }
 
-object = "MS910"
-page = "?"
+object = "Paris59"#"MS910"
+page = "test4"
 segmentation_number = pages[object][page][0]
 
 paths = {
