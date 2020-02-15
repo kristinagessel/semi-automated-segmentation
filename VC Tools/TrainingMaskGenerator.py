@@ -29,7 +29,6 @@ class TrainingMaskGenerator:
 
         file = open(PATH_TO_SAVE_OUTPUT + page_name + ".txt", "w")
         json.dump(pg_seg_pixels, file, indent=1)
-        #TODO: eventually... to do instance segmentation we might need polygons, not just points. When we get to that point, make the polygons with ONLY directly connected pixels. There are some weird straggler points that aren't connected in some cases
         return pg_seg_pixels, filtered_pts_dict
 
     def load_work_done(self, path, page_nums):
@@ -43,14 +42,6 @@ class TrainingMaskGenerator:
                 for pt in tmp[slice]:
                     output[slice].append(pt)
         return output
-
-    '''
-    3D Flood Fill
-    Run flood fill on a 'cube' (3x3x2 cube?) containing current slice and next slice.
-    In this way we won't necessarily proceed in a linear way through the slices.
-    '''
-    def do_3d_floodfill(self):
-        return 0 #TODO
 
     '''
     2D Flood Fill
@@ -146,6 +137,10 @@ class TrainingMaskGenerator:
                     if grey_val > self.low_tolerance and grey_val < self.high_tolerance:
                         valid_neighbors.append((x_pos + j, y_pos + i))
         return valid_neighbors
+
+    #Euclidean distance between two points
+    def calculate_distance_from_origin(self, orig_pt, pt):
+        return math.sqrt(abs(orig_pt[0]-pt[0])**2 + abs(orig_pt[1]-pt[1])**2)
 
     def create_semantic_training_set(self, page_points):
         master = {}
