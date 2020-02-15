@@ -9,7 +9,7 @@ from PIL import Image
 parser = argparse.ArgumentParser(description="Create a ground truth volume in HDF5 format.")
 parser.add_argument("volume_path", type=str, help="Path to the volume from which to make a subvolume.")
 parser.add_argument("output_path", type=str, help="Path to the output location.")
-parser.add_argument("mask_pts_path", type=str, help="Path to instance segmentation text file.")
+parser.add_argument("mask_pts_path", type=str, help="Path to instance segmentation text file (generated via InstanceFromAllFiles or TrainingMaskGenerator.)")
 args = parser.parse_args()
 
 f = open(args.mask_pts_path)

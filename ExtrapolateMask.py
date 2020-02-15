@@ -616,8 +616,8 @@ pages = {
     }
 }
 
-object = "Paris59"#"MS910"
-page = "test4"
+object = "MS910"
+page = "?"
 segmentation_number = pages[object][page][0]
 
 paths = {
