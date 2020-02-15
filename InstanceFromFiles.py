@@ -9,7 +9,7 @@ will get too big to hold in memory and TrainingMaskGenerator will get killed bef
 '''
 
 
-path_to_json_files = "/Volumes/Research/1. Research/Experiments/TrainingMasksAll/"
+path_to_json_files = "/Volumes/Research/1. Research/Experiments/TrainingMasksAll/instance/"
 path_to_hi_res_images = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/"
 
 files = glob.glob(path_to_json_files + "/*.txt")
@@ -26,7 +26,7 @@ for file in files:
     for slice in output:
         pg_pts[page][slice] = output[slice]
 print("Finished loading.")
-file = open(path_to_json_files + "instance_basic_avg/instance_pts.txt", "w")
+file = open(path_to_json_files + "/instance.txt", "w")
 ujson.dump(pg_pts, file, indent=1)
 '''
 #for each slice, read all the files... add appropriate points to the image, then close

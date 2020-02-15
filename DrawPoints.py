@@ -13,8 +13,8 @@ PATH_TO_HI_RES_WORK_DONE = PATH_TO_VOLPKG + "MS910.volpkg/work-done/hi-res/"
 PATH_TO_LOW_RES_WORK_DONE = PATH_TO_VOLPKG + "MS910.volpkg/work-done/low-res/"
 
 # If you want to read points from a json file instead of parse all over again:
-path_to_high_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/high_res_output/"
-path_to_low_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/low_res_output/"
+path_to_high_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/VCPoints/high_res_output/"
+path_to_low_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/VCPoints/low_res_output/"
 READ_JSON = False
 
 INCLUDE_TEARS = False
