@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 
-def create_subvolume(top_left_corner, width, height, z, start_slice, img_path, out_dir, dir_name):
+def CreateSubvolume(top_left_corner, width, height, z, start_slice, img_path, out_dir, dir_name):
     if not os.path.exists(out_dir + "/" + dir_name):
         os.mkdir(out_dir + "/" + dir_name)
 
@@ -22,7 +22,7 @@ def create_subvolume(top_left_corner, width, height, z, start_slice, img_path, o
         cv2.imwrite(out_dir + "/" + dir_name + "/" + img_name, cropped_img)
 
 #Adapted to TIF based on a utility available with Januszewski et. al.'s Flood-Filling Network
-def to_hdf5(img_dir, out_dir, ground_truth_mask_path):
+def ToHDF5(img_dir, out_dir, ground_truth_mask_path):
     tif_files = glob.glob(img_dir + '*.tif')
     tif_files.sort()
     images = [cv2.imread(i, 0) for i in tif_files]
@@ -37,8 +37,8 @@ def to_hdf5(img_dir, out_dir, ground_truth_mask_path):
         else:
             f.create_dataset('raw', data=images, compression='gzip', dtype='uint8')
 
-#TODO: write out image is broken right now (openCV doesn't know how to make sense of the shifted axes (x, y, z))
-def read_hdf5(path, out_dir):
+#TODO: writing out the image is broken right now (openCV doesn't know how to make sense of the shifted axes (x, y, z))
+def ReadHDF5(path, out_dir):
     file = h5py.File(path, 'r')
     #set = file.keys()
     dset = file["raw"]
@@ -68,6 +68,6 @@ parser.add_argument("is_ground_truth", type=bool, default=False, help="Generatin
 args = parser.parse_args()
 
 
-create_subvolume((args.top_left_corner_x, args.top_left_corner_y), args.width, args.height, args.depth, args.start_slice, args.volume_path, args.output_path, args.hdf5_name)
-to_hdf5(args.output_path + "/" + args.hdf5_name + "/", args.output_path + "/" + args.hdf5_name + "/" + args.hdf5_name, args.is_ground_truth)
-#read_hdf5(read_path, output_dir)
+CreateSubvolume((args.top_left_corner_x, args.top_left_corner_y), args.width, args.height, args.depth, args.start_slice, args.volume_path, args.output_path, args.hdf5_name)
+ToHDF5(args.output_path + "/" + args.hdf5_name + "/", args.output_path + "/" + args.hdf5_name + "/" + args.hdf5_name, args.is_ground_truth)
+#ReadHDF5(read_path, output_dir)
