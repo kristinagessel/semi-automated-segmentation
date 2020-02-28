@@ -141,7 +141,7 @@ class MaskExtrapolator:
         #skeleton, img = self.do_a_star(img)
         #skeleton = self.thin_cloud_zhang_suen(points)
         #skeleton = self.thin_cloud_continuous(points)
-        skeleton = self.fast_parallel_thin(points)
+        skeleton = self.parallel_thin(points, img)
 
 
         #skeleton = self.prune_skeleton(skeleton)
@@ -155,45 +155,57 @@ class MaskExtrapolator:
     Deng, Iyengar, Brener
     Name: OPATA8
     Supposed to solve the edge cases that foil Zhang Suen; does an asymmetrical thinning approach.
+    NOT fast at all.
     '''
-    def fast_parallel_thin(self, mask):
+    #TODO: pass in the image and check it directly rather than checking the whole list, might speed things up
+    def parallel_thin(self, mask, img):
         skeleton = mask.copy()
         #Define the 14 thinning patterns:
-        for point in skeleton:
-            #get neighbors we care about: (x, y+1) and (x, y-1)
-            x = point[0]
-            y = point[1]
+        pruning = True
+        marked_pts = []
+        while pruning:
+            pruning = False
+            for point in skeleton:
+                #get neighbors we care about: (x, y+1) and (x, y-1)
+                x = point[0]
+                y = point[1]
 
-            p0 = int(tuple((x, y + 1)) in skeleton)
-            p1 = int(tuple((x+1, y+1)) in skeleton)
-            p2 = int(tuple((x + 1, y)) in skeleton)
-            p3 = int(tuple((x+1, y-1)) in skeleton)
-            p4 = int(tuple((x, y - 1)) in skeleton)
-            p5 = int(tuple((x-1, y-1)) in skeleton)
-            p6 = int(tuple((x-1, y)) in skeleton)
-            p7 = int(tuple((x-1, y+1)) in skeleton)
-            p8 = int(tuple((x+2, y)) in skeleton)
-            p9 = int(tuple((x, y-2)) in skeleton)
+                p0 = img[y+1][x] > self.low_tolerance
+                p1 = img[x+1][y+1] > self.low_tolerance
+                p2 = img[x+1][y] > self.low_tolerance
+                p3 = img[x+1][y-1] > self.low_tolerance
+                p4 = img[x][y-1] > self.low_tolerance
+                p5 = img[x-1][y-1] > self.low_tolerance
+                p6 = img[x-1][y] > self.low_tolerance
+                p7 = img[x-1][y+1] > self.low_tolerance
+                p8 = img[x+2][y] > self.low_tolerance
+                p9 = img[x][y-2] > self.low_tolerance
 
-            #Wu and Tsai's 14 thinning patterns; base of this method
-            a = p0 and not p2 and (p1 or p3) and p4 and p5 and p6 and p7
-            b = p0 and p1 and p2 and (p3 or p5) and not p4 and p6 and p7
-            c = p0 and p1 and p2 and p3 and p4 and (p5 or p7) and not p6 and p8
-            d = p2 and p3 and p4 and p5 and p6 and (p1 or p7) and not p0 and p9
-            e = not p0 and not p1 and not p2 and p4 and p6
-            f = p0 and p1 and p2 and not p4 and not p5 and not p6
-            g = p0 and p2 and not p1 and not p3 and not p4 and not p5 and not p6 and not p7
-            h = p0 and not p2 and not p3 and not p4 and p6
-            i = p2 and p3 and p4 and not p0 and not p6 and not p7
-            j = not p0 and not p1 and p2 and not p3 and p4 and not p5 and not p6 and not p7
-            k = not p0 and not p1 and not p2 and p3 and p4 and p5 and not p6 and not p7
-            l = not p0 and not p1 and not p2 and not p3 and not p4 and p5 and p6 and p7
-            m = p0 and p1 and not p2 and not p3 and not p4 and not p5 and not p6 and p7
-            n = not p0 and p1 and p2 and p3 and not p4 and not p5 and not p6 and not p7
+                #Wu and Tsai's 14 thinning patterns; base of this method
+                a = p0 and not p2 and (p1 or p3) and p4 and p5 and p6 and p7
+                b = p0 and p1 and p2 and (p3 or p5) and not p4 and p6 and p7
+                c = p0 and p1 and p2 and p3 and p4 and (p5 or p7) and not p6 and p8
+                d = p2 and p3 and p4 and p5 and p6 and (p1 or p7) and not p0 and p9
+                e = not p0 and not p1 and not p2 and p4 and p6
+                f = p0 and p1 and p2 and not p4 and not p5 and not p6
+                g = p0 and p2 and not p1 and not p3 and not p4 and not p5 and not p6 and not p7
+                h = p0 and not p2 and not p3 and not p4 and p6
+                i = p2 and p3 and p4 and not p0 and not p6 and not p7
+                j = not p0 and not p1 and p2 and not p3 and p4 and not p5 and not p6 and not p7
+                k = not p0 and not p1 and not p2 and p3 and p4 and p5 and not p6 and not p7
+                l = not p0 and not p1 and not p2 and not p3 and not p4 and p5 and p6 and p7
+                m = p0 and p1 and not p2 and not p3 and not p4 and not p5 and not p6 and p7
+                n = not p0 and p1 and p2 and p3 and not p4 and not p5 and not p6 and not p7
 
-            #These alone do not eliminate concave points.
+                #If any of the above thinning patterns match this pixel and its neighbors, prune the pixel.
+                if(a or b or c or d or e or f or g or h or i or j or k or l or m or n):
+                    skeleton.remove(point)
+                    pruning = True
 
-        return mask #TODO
+                #These alone do not eliminate concave points.
+                #TODO: add the changes the authors made to recognize concave areas
+
+        return skeleton
 
 
 
