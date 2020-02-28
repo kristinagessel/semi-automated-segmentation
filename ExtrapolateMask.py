@@ -170,16 +170,16 @@ class MaskExtrapolator:
                 x = point[0]
                 y = point[1]
 
-                p0 = img[y+1][x] > self.low_tolerance
-                p1 = img[x+1][y+1] > self.low_tolerance
-                p2 = img[x+1][y] > self.low_tolerance
-                p3 = img[x+1][y-1] > self.low_tolerance
-                p4 = img[x][y-1] > self.low_tolerance
-                p5 = img[x-1][y-1] > self.low_tolerance
-                p6 = img[x-1][y] > self.low_tolerance
-                p7 = img[x-1][y+1] > self.low_tolerance
-                p8 = img[x+2][y] > self.low_tolerance
-                p9 = img[x][y-2] > self.low_tolerance
+                p0 = int(tuple((x, y + 1)) in skeleton)
+                p1 = int(tuple((x+1, y+1)) in skeleton)
+                p2 = int(tuple((x + 1, y)) in skeleton)
+                p3 = int(tuple((x+1, y-1)) in skeleton)
+                p4 = int(tuple((x, y - 1)) in skeleton)
+                p5 = int(tuple((x-1, y-1)) in skeleton)
+                p6 = int(tuple((x-1, y)) in skeleton)
+                p7 = int(tuple((x-1, y+1)) in skeleton)
+                p8 = int(tuple((x+2, y)) in skeleton)
+                p9 = int(tuple((x, y-2)) in skeleton)
 
                 #Wu and Tsai's 14 thinning patterns; base of this method
                 a = p0 and not p2 and (p1 or p3) and p4 and p5 and p6 and p7
