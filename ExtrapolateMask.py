@@ -23,7 +23,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 35#65
+        self.low_tolerance = 45#65
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -140,7 +140,8 @@ class MaskExtrapolator:
         #skeleton, img = self.thin_cloud(points, img)
         #skeleton, img = self.do_a_star(img)
         #skeleton = self.thin_cloud_zhang_suen(points)
-        skeleton = self.thin_cloud_continuous(points)
+        #skeleton = self.thin_cloud_continuous(points)
+        skeleton = self.fast_parallel_thin(points)
 
 
         #skeleton = self.prune_skeleton(skeleton)
@@ -148,6 +149,52 @@ class MaskExtrapolator:
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
+
+    '''
+    "A Fast Parallel Thinning Algorithm for the Binary Image Skeletonization"
+    Deng, Iyengar, Brener
+    Name: OPATA8
+    Supposed to solve the edge cases that foil Zhang Suen; does an asymmetrical thinning approach.
+    '''
+    def fast_parallel_thin(self, mask):
+        skeleton = mask.copy()
+        #Define the 14 thinning patterns:
+        for point in skeleton:
+            #get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+
+            p0 = int(tuple((x, y + 1)) in skeleton)
+            p1 = int(tuple((x+1, y+1)) in skeleton)
+            p2 = int(tuple((x + 1, y)) in skeleton)
+            p3 = int(tuple((x+1, y-1)) in skeleton)
+            p4 = int(tuple((x, y - 1)) in skeleton)
+            p5 = int(tuple((x-1, y-1)) in skeleton)
+            p6 = int(tuple((x-1, y)) in skeleton)
+            p7 = int(tuple((x-1, y+1)) in skeleton)
+            p8 = int(tuple((x+2, y)) in skeleton)
+            p9 = int(tuple((x, y-2)) in skeleton)
+
+            #Wu and Tsai's 14 thinning patterns; base of this method
+            a = p0 and not p2 and (p1 or p3) and p4 and p5 and p6 and p7
+            b = p0 and p1 and p2 and (p3 or p5) and not p4 and p6 and p7
+            c = p0 and p1 and p2 and p3 and p4 and (p5 or p7) and not p6 and p8
+            d = p2 and p3 and p4 and p5 and p6 and (p1 or p7) and not p0 and p9
+            e = not p0 and not p1 and not p2 and p4 and p6
+            f = p0 and p1 and p2 and not p4 and not p5 and not p6
+            g = p0 and p2 and not p1 and not p3 and not p4 and not p5 and not p6 and not p7
+            h = p0 and not p2 and not p3 and not p4 and p6
+            i = p2 and p3 and p4 and not p0 and not p6 and not p7
+            j = not p0 and not p1 and p2 and not p3 and p4 and not p5 and not p6 and not p7
+            k = not p0 and not p1 and not p2 and p3 and p4 and p5 and not p6 and not p7
+            l = not p0 and not p1 and not p2 and not p3 and not p4 and p5 and p6 and p7
+            m = p0 and p1 and not p2 and not p3 and not p4 and not p5 and not p6 and p7
+            n = not p0 and p1 and p2 and p3 and not p4 and not p5 and not p6 and not p7
+
+            #These alone do not eliminate concave points.
+
+        return mask #TODO
+
 
 
     '''
@@ -604,7 +651,8 @@ pages = {
     "11" : ["20191123203022", 0],
     "?" : ["20191126112158", 0],
     "??" : ["20191126122204", 0],
-    "???" : ["20191126132825", 0]
+    "???" : ["20191126132825", 0],
+    "lr1" : ["20200217180742", 190] #low res
     },
     "Paris59": { #Note: grey tolerance 35 works well
         "test" : ["20191204123934", 430], #segmentation #, start slice
@@ -617,7 +665,7 @@ pages = {
 }
 
 object = "MS910"
-page = "?"
+page = "lr1"
 segmentation_number = pages[object][page][0]
 
 paths = {
@@ -638,7 +686,7 @@ paths = {
 start_slice = pages[object][page][1]
 num_iterations = 300
 
-volume_path = paths[object]["high-res"]
+volume_path = paths[object]["low-res"]
 pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
 
