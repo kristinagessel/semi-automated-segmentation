@@ -27,7 +27,6 @@ num_color_dict = {}
 pg_colors = []
 obj_limit = 500
 
-#TODO: this is broken, it's not sampling correctly from the volumes.
 #record anything that's not 0 through all the layers (shape[2] is hopefully z, verify)
 for z in range(0, dataset.shape[2]):
     slice_num = str(z).zfill(4)

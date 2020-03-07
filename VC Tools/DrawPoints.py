@@ -4,12 +4,12 @@ import os
 import cv2
 import re
 
-PATH_TO_OUTPUT_DIR = "/Volumes/Research/1. Research/Experiments/"
+PATH_TO_OUTPUT_DIR = "/Volumes/Research/1. Research/1. Iowa Examples/VC Renders/"#"/Volumes/Research/1. Research/Experiments/"
 PATH_TO_VOLPKG = "/Volumes/Research/1. Research/"
 
 HI_RES_PATH = PATH_TO_VOLPKG + "MS910.volpkg/volumes/20180122092342"
 LOW_RES_PATH = PATH_TO_VOLPKG + "MS910.volpkg/volumes/20180220092522"
-PATH_TO_HI_RES_WORK_DONE = PATH_TO_VOLPKG + "MS910.volpkg/work-done/hi-res/"
+PATH_TO_HI_RES_WORK_DONE = "/Volumes/Research/1. Research/1. Iowa Examples/VC Renders/" #PATH_TO_VOLPKG + "MS910.volpkg/work-done/hi-res/"
 PATH_TO_LOW_RES_WORK_DONE = PATH_TO_VOLPKG + "MS910.volpkg/work-done/low-res/"
 
 # If you want to read points from a json file instead of parse all over again:
@@ -17,7 +17,7 @@ path_to_high_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/VCPoin
 path_to_low_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/VCPoints/low_res_output/"
 READ_JSON = False
 
-INCLUDE_TEARS = False
+INCLUDE_TEARS = True
 
 class Extractor:
     def __init__(self):
@@ -33,7 +33,7 @@ class Extractor:
     #points: array of all the points (in tuple format) at that slice number
     def draw_on_img(self, img_path, slice_num, points, page, include_tears):
         im = cv2.imread(img_path)
-        radius = 3
+        radius = 2
 
         for point in points:
             x = int(point[0])
@@ -62,9 +62,12 @@ class Extractor:
 
         #Get all the work done in low/high-res (split into pages)
         page_regex = re.compile("^[\d+]+(-\d+)?")
-        for dirpath, dirnames, filenames in os.walk(path_to_segs):
+        for filename in os.listdir(path_to_segs):
+            if page_regex.match(filename):
+                page_dirs.append(filename)
+        #for dirpath, dirnames, filenames in os.walk(path_to_segs):
             #folders have a naming convention -- usually either all ints (high res) or sometimes int "-" int in low res
-            page_dirs = page_dirs + ([dirname for dirname in dirnames if page_regex.match(dirname)])
+        #    page_dirs = page_dirs + ([dirname for dirname in dirnames if page_regex.match(dirname)])
 
         for page in page_dirs:
             #add to the dictionary for each page found in the segmentation folder
@@ -77,6 +80,7 @@ class Extractor:
         #now get into the page directories and pick out all the segmentations that exist for each page
         #save in a dictionary as (page num: seg_1, seg_2, ...)
         seg_regex = re.compile("\d{14}")  # search for segmentation directories YYYYMMDDHHMMSS format
+        #TODO: redundant:
         for dirpath, dirnames, filenames in os.walk(path_to_pg):
             segmentation_dirs = segmentation_dirs + ([dirname for dirname in dirnames if seg_regex.match(dirname)])
 
@@ -174,7 +178,7 @@ def main():
 
             for slice_num in output_dictionary:  # for key in dictionary
                 points_of_interest = output_dictionary[slice_num]  # Look for the slice num in the dictionary
-                ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page)
+                ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page, INCLUDE_TEARS)
     else:
         for page in seg_dict:
             output_dictionary = ex.condense_segmentations(page, seg_dict[page], path_to_work_done+page+"/")
@@ -184,4 +188,4 @@ def main():
                 points_of_interest = output_dictionary[slice_num]  # Look for the slice num in the dictionary
                 ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page, INCLUDE_TEARS)
 
-#main()
+main()
