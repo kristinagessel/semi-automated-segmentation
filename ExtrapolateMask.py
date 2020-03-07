@@ -5,6 +5,9 @@ import os
 import math
 import numpy as np
 
+#import skimage.morphology as skm
+import matplotlib.pyplot as plt
+
 '''
 Given an original slice and an original pointset tracing a single page through the slice, extrapolate in 3D to subsequent slices.
 3D floodfill as a start?
@@ -23,7 +26,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 45#65
+        self.low_tolerance = 45 #65
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -101,7 +104,7 @@ class MaskExtrapolator:
 
         height, width, channel = im.shape #grab the image properties for bounds checking later
 
-        avg = int(self.calc_avg_pg_width(start_pts, im))
+        avg = int(self.calc_med_pg_width(start_pts, im))
 
         #Floodfill Step: Fill all connected points that pass the threshold checks and are in the bounds specified by avg width of the page.
         while stack:
@@ -140,8 +143,10 @@ class MaskExtrapolator:
         #skeleton, img = self.thin_cloud(points, img)
         #skeleton, img = self.do_a_star(img)
         #skeleton = self.thin_cloud_zhang_suen(points)
-        #skeleton = self.thin_cloud_continuous(points)
-        skeleton = self.parallel_thin(points, img)
+        skeleton = self.thin_cloud_continuous(points)
+        #skeleton = self.parallel_thin(points, img)
+        #skeleton = self.skimage_thin_cloud(points, img)
+        #skeleton = self.opencv_skeleton_thinning(points, img)
 
 
         #skeleton = self.prune_skeleton(skeleton)
@@ -149,6 +154,265 @@ class MaskExtrapolator:
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
+
+    #Isn't working, not sure why.
+    def opencv_skeleton_thinning(self, points, img):
+        shape = img.shape
+        x_dims = shape[1]
+        y_dims = shape[0]
+        im = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
+        # TODO: make a binary image from the mask
+        for pt in points:
+            x = pt[0]
+            y = pt[1]
+            im[y][x] = 1
+        #out = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
+        out = cv2.ximgproc.thinning(im)
+        plt.imshow(out)
+        plt.show()
+        print("Skeletonization done")
+
+
+    #Both Lee and Zhang Suen seem to do really bad...
+    def skimage_thin_cloud(self, points, img):
+        shape = img.shape
+        x_dims = shape[1]
+        y_dims = shape[0]
+        im = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
+        #TODO: make a binary image from the mask
+        for pt in points:
+            x = pt[0]
+            y = pt[1]
+            im[y][x] = 1
+
+        skeleton = skm.skeletonize(im)
+        print("obtained skeleton")
+        #return skeleton
+
+        plt.imshow(skeleton, cmap=plt.cm.gray)
+        plt.show()
+
+    '''Morphological Thinning
+    Thin cloud to get a skeleton and produce a continuous skeleton.
+    
+    This is the basic implementation given in section 8.6.2 of "Computer Vision", 5th Edition, by E.R. Davies
+    On average, it takes 5 minutes to segment a layer. Not good.
+    
+    *****TODO: perhaps try to instead put points into a dictionary like: dict[x][y] for faster lookup? 
+    (Then you just check if x and y exist in dictionary. Maybe it's a little faster?)
+    '''
+    def thin_cloud_continuous(self, points):
+        skeleton = points.copy()
+
+        while(True):
+            skeleton, thinned_n = self.strip_north_pts(skeleton)
+            skeleton, thinned_s = self.strip_south_pts(skeleton)
+            skeleton, thinned_e = self.strip_east_pts(skeleton)
+            skeleton, thinned_w = self.strip_west_pts(skeleton)
+            #If no thinning occurred in this last iteration, we are finished.
+            if not(thinned_n or thinned_s or thinned_e or thinned_w):
+                break
+
+        return skeleton
+
+    def strip_north_pts(self, mask):
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            #get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            sigma, chi = self.calculate_params(point, mask)
+            #check if chi == 2 and sigma != 1:
+            #(implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x, y+1)) not in mask: #i.e. it's 0
+                        if tuple((x, y-1)) in mask: #i.e. it's 1
+                                #remove the pixel from the mask
+                                points_to_remove.append(point)
+                                thinned = True
+        print("Removing ", len(points_to_remove), " points.")
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
+
+    def strip_south_pts(self, mask):
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            #get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            sigma, chi = self.calculate_params(point, mask)
+            #check if chi == 2 and sigma != 1:
+            #(implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x, y-1)) not in mask:
+                    if tuple((x, y+1)) in mask:
+                        #remove the pixel from the mask
+                        points_to_remove.append(point)
+                        thinned = True
+        print("Removing ", len(points_to_remove), " points.")
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
+
+    def strip_east_pts(self, mask):
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            # get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            sigma, chi = self.calculate_params(point, mask)
+            # check if chi == 2 and sigma != 1:
+            # (implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x + 1, y)) not in mask:
+                    if tuple((x - 1, y)) in mask:
+                        # remove the pixel from the mask
+                        points_to_remove.append(point)
+                        thinned = True
+        print("Removing ", len(points_to_remove), " points.")
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
+
+    def strip_west_pts(self, mask):
+        thinned = False
+        points_to_remove = []
+        for point in mask:
+            # get neighbors we care about: (x, y+1) and (x, y-1)
+            x = point[0]
+            y = point[1]
+            sigma, chi = self.calculate_params(point, mask)
+            # check if chi == 2 and sigma != 1:
+            # (implied that center pixel is active if it's in the mask, so no need to check)
+            if chi == 2 and sigma != 1:
+                if tuple((x - 1, y)) not in mask:
+                    if tuple((x + 1, y)) in mask:
+                        # remove the pixel from the mask
+                        points_to_remove.append(point)
+                        thinned = True
+        print("Removing ", len(points_to_remove), " points.")
+        for point in points_to_remove:
+            mask.remove(point)
+        return mask, thinned
+
+    def calculate_params(self, point, mask):
+        x = point[0]
+        y = point[1]
+        A1 = int(tuple((x, y + 1)) in mask)
+        A2 = int(tuple((x + 1, y + 1)) in mask)
+        A3 = int(tuple((x + 1, y)) in mask)
+        A4 = int(tuple((x + 1, y - 1)) in mask)
+        A5 = int(tuple((x, y - 1)) in mask)
+        A6 = int(tuple((x - 1, y - 1)) in mask)
+        A7 = int(tuple((x - 1, y)) in mask)
+        A8 = int(tuple((x - 1, y + 1)) in mask)
+
+        # calculate chi (crossing number) and sigma (number of active neighbors)
+        # No need to cast to int?
+        chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + (
+                    (A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
+        sigma = self.calculate_sigma(point, mask)
+        return sigma, chi
+
+    def calculate_sigma(self, point, mask):
+        row = [0, 1, -1]
+        col = [0, 1, -1]
+        pt_x = point[0]
+        pt_y = point[1]
+        ctr = 0
+        for x in row:
+            for y in col:
+                if x != 0 or y != 0: #ignore (0,0)
+                    if tuple((pt_x + x, pt_y + y)) in mask:
+                        ctr += 1
+        return ctr
+
+    '''
+    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
+    '''
+    def prune_skeleton(self, skeleton):
+        #eliminate 'stray' points that slipped by the skeletonization algorithm
+        return skeleton #TODO
+
+    #Taken from TrainingMaskGenerator's implementation
+    def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
+        valid_neighbors = []
+        x = [-1, 0, 1]
+        y = [-1, 0, 1]
+        x_pos = voxel[0][0]
+        y_pos = voxel[0][1]
+        for i in y: #height
+            for j in x: #width
+                if (i != 0 or j != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(voxel[0], voxel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
+                    grey_val = im[y_pos + i][x_pos + j][0]
+                    if grey_val > self.low_tolerance: #and grey_val < self.high_tolerance:
+                        valid_neighbors.append((x_pos + j, y_pos + i))
+        return valid_neighbors
+
+    # Taken from TrainingMaskGenerator's implementation
+    #what distance metric? Right now--Euclidean
+    def calculate_distance_from_origin(self, point, origin):
+        return self.euclidean_dist(point, origin)
+
+    #Median of the width might be a more helpful metric?
+    #TODO: improve on this. The complex shape of the pages means this doesn't work too well.
+    def calc_med_pg_width(self, pts, im):
+        pt_counts = []
+        for pt in pts:
+            x_pos = pt[0]
+            y_pos = pt[1]
+            #from this pt, go left and right from the pixel. Get this length.
+            grey_val = im[y_pos][x_pos][0]
+            length_ctr = 1
+
+            #go left
+            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
+                x_pos -= 1
+                grey_val = im[y_pos][x_pos][0]
+                length_ctr += 1
+
+            #go right
+            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
+                x_pos += 1
+                grey_val = im[y_pos][x_pos][0]
+                length_ctr += 1
+            pt_counts.append(length_ctr)
+
+        if math.isnan(np.median(pt_counts)):
+            return 0
+        return np.median(pt_counts)
+
+    #Taken from TrainingMaskGenerator's implementation
+    #TODO: improve on this. The complex shape of the pages means this doesn't work too well.
+    def calc_avg_pg_width(self, pts, im):
+        pt_counts = []
+        for pt in pts:
+            x_pos = pt[0]
+            y_pos = pt[1]
+            #from this pt, go left and right from the pixel. Get this length.
+            grey_val = im[y_pos][x_pos][0]
+            length_ctr = 1
+
+            #go left
+            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
+                x_pos -= 1
+                grey_val = im[y_pos][x_pos][0]
+                length_ctr += 1
+
+            #go right
+            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
+                x_pos += 1
+                grey_val = im[y_pos][x_pos][0]
+                length_ctr += 1
+            pt_counts.append(length_ctr)
+
+        if math.isnan(np.average(pt_counts)):
+            return 0
+        return np.average(pt_counts)
 
     '''
     "A Fast Parallel Thinning Algorithm for the Binary Image Skeletonization"
@@ -206,8 +470,6 @@ class MaskExtrapolator:
                 #TODO: add the changes the authors made to recognize concave areas
 
         return skeleton
-
-
 
     '''
     Important note: A* will only work if it can find a path from the start point to the end point. 
@@ -303,188 +565,6 @@ class MaskExtrapolator:
     END A* UTILITIES
     '''
 
-    '''Morphological Thinning
-    Thin cloud to get a skeleton and produce a continuous skeleton.
-    
-    This is the basic implementation given in section 8.6.2 of "Computer Vision", 5th Edition, by E.R. Davies
-    On average, it takes 5 minutes to segment a layer. Not good.
-    
-    *****TODO: perhaps try to instead put points into a dictionary like: dict[x][y] for faster lookup? 
-    (Then you just check if x and y exist in dictionary. Maybe it's a little faster?)
-    '''
-    def thin_cloud_continuous(self, points):
-        skeleton = points.copy()
-
-        while(True):
-            skeleton, thinned_n = self.strip_north_pts(skeleton)
-            skeleton, thinned_s = self.strip_south_pts(skeleton)
-            skeleton, thinned_e = self.strip_east_pts(skeleton)
-            skeleton, thinned_w = self.strip_west_pts(skeleton)
-            #If no thinning occurred in this last iteration, we are finished.
-            if not(thinned_n or thinned_s or thinned_e or thinned_w):
-                break
-
-        return skeleton
-
-    def strip_north_pts(self, mask):
-        thinned = False
-        points_to_remove = []
-        for point in mask:
-            #get neighbors we care about: (x, y+1) and (x, y-1)
-            x = point[0]
-            y = point[1]
-
-            A1 = int(tuple((x, y + 1)) in mask)
-            A2 = int(tuple((x+1, y+1)) in mask)
-            A3 = int(tuple((x + 1, y)) in mask)
-            A4 = int(tuple((x+1, y-1)) in mask)
-            A5 = int(tuple((x, y - 1)) in mask)
-            A6 = int(tuple((x-1, y-1)) in mask)
-            A7 = int(tuple((x-1, y)) in mask)
-            A8 = int(tuple((x-1, y+1)) in mask)
-
-            #calculate chi (crossing number) and sigma (number of active neighbors)
-            #No need to cast to int, Python can handle this
-            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
-            sigma = self.calculate_sigma(point, mask)
-
-            #check if chi == 2 and sigma != 1:
-            #(implied that center pixel is active if it's in the mask, so no need to check)
-            if chi == 2 and sigma != 1:
-                if tuple((x, y+1)) not in mask: #i.e. it's 0
-                        if tuple((x, y-1)) in mask: #i.e. it's 1
-                                #remove the pixel from the mask
-                                points_to_remove.append(point)
-                                thinned = True
-        print("Removing ", len(points_to_remove), " points.")
-        for point in points_to_remove:
-            mask.remove(point)
-        return mask, thinned
-
-    def strip_south_pts(self, mask):
-        thinned = False
-        points_to_remove = []
-        for point in mask:
-            #get neighbors we care about: (x, y+1) and (x, y-1)
-            x = point[0]
-            y = point[1]
-
-            A1 = int(tuple((x, y + 1)) in mask)
-            A2 = int(tuple((x+1, y+1)) in mask)
-            A3 = int(tuple((x + 1, y)) in mask)
-            A4 = int(tuple((x+1, y-1)) in mask)
-            A5 = int(tuple((x, y - 1)) in mask)
-            A6 = int(tuple((x-1, y-1)) in mask)
-            A7 = int(tuple((x-1, y)) in mask)
-            A8 = int(tuple((x-1, y+1)) in mask)
-
-            #calculate chi (crossing number) and sigma (number of active neighbors)
-            #No need to cast to int?
-            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
-            sigma = self.calculate_sigma(point, mask)
-
-            #check if chi == 2 and sigma != 1:
-            #(implied that center pixel is active if it's in the mask, so no need to check)
-            if chi == 2 and sigma != 1:
-                if tuple((x, y-1)) not in mask:
-                    if tuple((x, y+1)) in mask:
-                        #remove the pixel from the mask
-                        points_to_remove.append(point)
-                        thinned = True
-        print("Removing ", len(points_to_remove), " points.")
-        for point in points_to_remove:
-            mask.remove(point)
-        return mask, thinned
-
-    def strip_east_pts(self, mask):
-        thinned = False
-        points_to_remove = []
-        for point in mask:
-            # get neighbors we care about: (x, y+1) and (x, y-1)
-            x = point[0]
-            y = point[1]
-
-            A1 = int(tuple((x, y + 1)) in mask)
-            A2 = int(tuple((x+1, y+1)) in mask)
-            A3 = int(tuple((x + 1, y)) in mask)
-            A4 = int(tuple((x+1, y-1)) in mask)
-            A5 = int(tuple((x, y - 1)) in mask)
-            A6 = int(tuple((x-1, y-1)) in mask)
-            A7 = int(tuple((x-1, y)) in mask)
-            A8 = int(tuple((x-1, y+1)) in mask)
-
-            #calculate chi (crossing number) and sigma (number of active neighbors)
-            #No need to cast to int?
-            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
-            sigma = self.calculate_sigma(point, mask)
-
-            # check if chi == 2 and sigma != 1:
-            # (implied that center pixel is active if it's in the mask, so no need to check)
-            if chi == 2 and sigma != 1:
-                if tuple((x + 1, y)) not in mask:
-                    if tuple((x - 1, y)) in mask:
-                        # remove the pixel from the mask
-                        points_to_remove.append(point)
-                        thinned = True
-        print("Removing ", len(points_to_remove), " points.")
-        for point in points_to_remove:
-            mask.remove(point)
-        return mask, thinned
-
-    def strip_west_pts(self, mask):
-        thinned = False
-        points_to_remove = []
-        for point in mask:
-            # get neighbors we care about: (x, y+1) and (x, y-1)
-            x = point[0]
-            y = point[1]
-
-            A1 = int(tuple((x, y + 1)) in mask)
-            A2 = int(tuple((x+1, y+1)) in mask)
-            A3 = int(tuple((x + 1, y)) in mask)
-            A4 = int(tuple((x+1, y-1)) in mask)
-            A5 = int(tuple((x, y - 1)) in mask)
-            A6 = int(tuple((x-1, y-1)) in mask)
-            A7 = int(tuple((x-1, y)) in mask)
-            A8 = int(tuple((x-1, y+1)) in mask)
-
-            #calculate chi (crossing number) and sigma (number of active neighbors)
-            #No need to cast to int?
-            chi = (A1 != A3) + (A3 != A5) + (A5 != A7) + int(A7 != A1) + (2 * (A2 > A1) and (A2 > A3)) + ((A4 > A3) and (A4 > A5)) + ((A6 > A5) and (A6 > A7)) + ((A8 > A7) and (A8 > A1))
-            sigma = self.calculate_sigma(point, mask)
-
-            # check if chi == 2 and sigma != 1:
-            # (implied that center pixel is active if it's in the mask, so no need to check)
-            if chi == 2 and sigma != 1:
-                if tuple((x - 1, y)) not in mask:
-                    if tuple((x + 1, y)) in mask:
-                        # remove the pixel from the mask
-                        points_to_remove.append(point)
-                        thinned = True
-        print("Removing ", len(points_to_remove), " points.")
-        for point in points_to_remove:
-            mask.remove(point)
-        return mask, thinned
-
-    def calculate_sigma(self, point, mask):
-        row = [0, 1, -1]
-        col = [0, 1, -1]
-        pt_x = point[0]
-        pt_y = point[1]
-        ctr = 0
-        for x in row:
-            for y in col:
-                if x != 0 or y != 0: #ignore (0,0)
-                    if tuple((pt_x + x, pt_y + y)) in mask:
-                        ctr += 1
-        return ctr
-
-    '''
-    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
-    '''
-    def prune_skeleton(self, skeleton):
-        #eliminate 'stray' points that slipped by the skeletonization algorithm
-        return skeleton #TODO
 
     '''
     Create a skeleton by thinning the point cloud mask that we have.
@@ -604,54 +684,6 @@ class MaskExtrapolator:
                 neighbor_ctr += 1
         return neighbor_ctr
 
-    #Taken from TrainingMaskGenerator's implementation
-    def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
-        valid_neighbors = []
-        x = [-1, 0, 1]
-        y = [-1, 0, 1]
-        x_pos = voxel[0][0]
-        y_pos = voxel[0][1]
-        for i in y: #height
-            for j in x: #width
-                if (i != 0 or j != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(voxel[0], voxel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
-                    grey_val = im[y_pos + i][x_pos + j][0]
-                    if grey_val > self.low_tolerance: #and grey_val < self.high_tolerance:
-                        valid_neighbors.append((x_pos + j, y_pos + i))
-        return valid_neighbors
-
-    # Taken from TrainingMaskGenerator's implementation
-    #what distance metric? Right now--Euclidean
-    def calculate_distance_from_origin(self, point, origin):
-        return self.euclidean_dist(point, origin)
-
-    #Taken from TrainingMaskGenerator's implementation
-    #TODO: improve on this. The complex shape of the pages means this doesn't work too well.
-    def calc_avg_pg_width(self, pts, im):
-        pt_counts = []
-        for pt in pts:
-            x_pos = pt[0]
-            y_pos = pt[1]
-            #from this pt, go left and right from the pixel. Get this length.
-            grey_val = im[y_pos][x_pos][0]
-            length_ctr = 1
-
-            #go left
-            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
-                x_pos -= 1
-                grey_val = im[y_pos][x_pos][0]
-                length_ctr += 1
-
-            #go right
-            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
-                x_pos += 1
-                grey_val = im[y_pos][x_pos][0]
-                length_ctr += 1
-            pt_counts.append(length_ctr)
-
-        if math.isnan(np.average(pt_counts)):
-            return 0
-        return np.average(pt_counts)
-
 #---------------------------------------------------
 
 #page num : [seg #, start slice]
@@ -677,7 +709,7 @@ pages = {
 }
 
 object = "MS910"
-page = "lr1"
+page = "?"
 segmentation_number = pages[object][page][0]
 
 paths = {
@@ -698,7 +730,7 @@ paths = {
 start_slice = pages[object][page][1]
 num_iterations = 300
 
-volume_path = paths[object]["low-res"]
+volume_path = paths[object]["high-res"]
 pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
 
