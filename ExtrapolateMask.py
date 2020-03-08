@@ -696,6 +696,7 @@ pages = {
     "?" : ["20191126112158", 0],
     "??" : ["20191126122204", 0],
     "???" : ["20191126132825", 0],
+    "????" : ["20200307101907", 10],
     "lr1" : ["20200217180742", 190] #low res
     },
     "Paris59": { #Note: grey tolerance 35 works well
@@ -709,7 +710,7 @@ pages = {
 }
 
 object = "MS910"
-page = "?"
+page = "????"
 segmentation_number = pages[object][page][0]
 
 paths = {
