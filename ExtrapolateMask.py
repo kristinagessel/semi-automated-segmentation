@@ -275,42 +275,6 @@ class MaskExtrapolator:
         #cv2.imwrite("/Users/kristinagessel/Desktop/out.tif", dist)
         #print("done")
 
-    #Isn't working, not sure why.
-    def opencv_skeleton_thinning(self, points, img):
-        shape = img.shape
-        x_dims = shape[1]
-        y_dims = shape[0]
-        im = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
-        # TODO: make a binary image from the mask
-        for pt in points:
-            x = pt[0]
-            y = pt[1]
-            im[y][x] = 1
-        #out = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
-        out = cv2.ximgproc.thinning(im)
-        plt.imshow(out)
-        plt.show()
-        print("Skeletonization done")
-
-
-    #Both Lee and Zhang Suen seem to do really bad...
-    def skimage_thin_cloud(self, points, img):
-        shape = img.shape
-        x_dims = shape[1]
-        y_dims = shape[0]
-        im = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
-        #TODO: make a binary image from the mask
-        for pt in points:
-            x = pt[0]
-            y = pt[1]
-            im[y][x] = 1
-
-        skeleton = skm.skeletonize(im)
-        print("obtained skeleton")
-        #return skeleton
-
-        plt.imshow(skeleton, cmap=plt.cm.gray)
-        plt.show()
 
     '''Morphological Thinning
     Thin cloud to get a skeleton and produce a continuous skeleton.
@@ -585,88 +549,6 @@ class MaskExtrapolator:
         return skeleton
 
     '''
-    Important note: A* will only work if it can find a path from the start point to the end point. 
-    This A* implementation searches along the actual image, not the mask, to try and improve the chances of finding a path (the threshold is dropped to make it less picky.)
-    Sometimes this fails quite spectacularly, though. A* won't find a path if a complete tear in the page exists.
-    '''
-    def do_a_star(self, img):
-        #Get all the set voxels in a form where we just have their (x,y) position
-        set_voxels = []
-        for key in self.set_voxels.keys():
-            for key2 in self.set_voxels[key].keys():
-                set_voxels.append((key, key2))
-                #(x, y)
-
-        #Find tuple containing min y
-        min_y = min(set_voxels, key=lambda t: t[1])
-
-        #Find tuple containing max y
-        max_y = max(set_voxels, key=lambda t: t[1])
-
-        current_pos = (min_y, min_y, 0, 0)
-        skeleton = []
-        visited_voxels = []
-        list_of_moves = []
-        list_of_moves.append((min_y, min_y, 0, 0)) #(current location, parent location, g, f)
-        #fixed cost of 1 for every move--no move is weighted more than another
-        while current_pos[0] != max_y: #TODO: does this compare value or the actual object? check
-            #if len(list_of_moves) > 0: # if a possible move exists and it isn't completely exhausted
-            current_pos = list_of_moves.pop(0) #Take the top move and do it
-            #else: #If we're out of moves and haven't reached the goal, we're stuck. There's a tear or something.
-            #    return skeleton, img
-            visited_voxels.append(current_pos)
-            x = [-1, 0, 1]
-            y = [-1, 0, 1]
-            for i in y:  # height
-                for j in x:  # width
-                    if (i != 0 or j != 0) and (img[int(current_pos[0][1] + i)][int(current_pos[0][0] + j)][0] > self.low_tolerance-15): #check that the neighbor is a valid grey level to be set
-                        tmp_pos = tuple(((current_pos[0][0] + j, current_pos[0][1] + i), current_pos[0], current_pos[2]+1, self.calculate_f(max_y, (current_pos[0][0] + j, current_pos[0][1] + i), current_pos)))
-                        if tmp_pos not in visited_voxels:
-                            if self.dest_not_visited(tmp_pos[0], visited_voxels) or tmp_pos[3] < self.get_f_of_existing(tmp_pos, visited_voxels):
-                                if not tmp_pos[3] >= self.get_f_of_existing(tmp_pos, list_of_moves) or self.get_f_of_existing(tmp_pos, list_of_moves) == -1:
-                                    list_of_moves.append(tmp_pos)
-            list_of_moves.sort(key=lambda x:x[3]) #Sort by f value so we pick the smallest f every time
-        skeleton.append(current_pos[0])
-        skeleton = self.find_shortest_path(skeleton, visited_voxels, max_y, min_y)
-        return skeleton, img
-
-    '''
-    A* UTILITIES
-    '''
-    #Travel from the goal to the start, generating the shortest path found by the algorithm.
-    def find_shortest_path(self, skeleton, node_relationships, goal, start):
-        current_location = goal
-        pathComplete = False
-        while (pathComplete is False):
-            # find current_location in the list of tuples as a destination
-            # add the 'source' to the shortest_path
-            for elem in node_relationships:
-                if elem[0] == current_location:
-                    skeleton.append(elem[1])
-                    current_location = elem[1]
-            if start in skeleton:  # If we've added the start location to the shortest path, we've got a path.
-                pathComplete = True
-        return skeleton
-
-    def get_f_of_existing(self, pos_tuple, list):
-        for elem in list:
-            if (pos_tuple[0] == elem[0]):
-                return elem[3]
-        return -1  # Didn't find it
-
-    def dest_not_visited(self, dest, list):
-        for elem in list:
-            if (dest == elem[0]):
-                return False
-        return True
-
-    def calculate_f(self, dest, new_loc, current_loc_tuple):
-        h = self.euclidean_dist(new_loc, dest)
-        g = current_loc_tuple[2]+1
-        f = g + h
-        return f
-
-    '''
     Calculate the euclidean distance between 2 points
     '''
     def euclidean_dist(self, src, dest):
@@ -674,9 +556,6 @@ class MaskExtrapolator:
         delta_y = abs(src[1] - dest[1])
         distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
         return distance
-    '''
-    END A* UTILITIES
-    '''
 
 
     '''
