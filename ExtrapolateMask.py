@@ -1,3 +1,5 @@
+import argparse
+
 import VCPSReader as vr
 import ujson
 import cv2
@@ -26,7 +28,7 @@ Scenario:
 '''
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
-        self.low_tolerance = 45 #65
+        self.low_tolerance = 55
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
@@ -54,6 +56,13 @@ class MaskExtrapolator:
         #Do flood fill for this slice
         #10 times for now to test
         for i in range(num_iterations):
+
+            #Save periodically
+            if num_iterations % 100 == 0:
+                file = open(self.save_path + page + " " + str(num_iterations) + ".txt", "w")
+                ujson.dump(self.flood_fill_data, file, indent=1)
+                file.close()
+
             self.flood_fill_data[self.slice], self.fill_pts, self.slice = self.do_2d_floodfill(self.fill_pts, page, self.slice)
             self.skeleton_data[self.slice] = self.fill_pts
 
@@ -143,17 +152,128 @@ class MaskExtrapolator:
         #skeleton, img = self.thin_cloud(points, img)
         #skeleton, img = self.do_a_star(img)
         #skeleton = self.thin_cloud_zhang_suen(points)
-        skeleton = self.thin_cloud_continuous(points)
         #skeleton = self.parallel_thin(points, img)
         #skeleton = self.skimage_thin_cloud(points, img)
         #skeleton = self.opencv_skeleton_thinning(points, img)
 
+        #Pre-process distance transform
+        #Distance transform breaks some continuity, but the skeleton has fewer spurs, and it's a bit faster when DT eliminates lots of pixels
+        points = self.opencv_distance_transform(points, img)
+        skeleton = self.thin_cloud_continuous(points)
 
-        #skeleton = self.prune_skeleton(skeleton)
+
+        skeleton = self.prune_skeleton(skeleton, img)
 
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
+
+    '''
+    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
+    '''
+    def prune_skeleton(self, skeleton, img):
+        pruned_skeleton = skeleton
+        #eliminate 'stray' points that slipped by the skeletonization algorithm
+        pruned_skeleton = self.prune_with_sliding_window(skeleton, img)
+        return pruned_skeleton
+
+    '''
+    Given a skeleton with noisy spurs and loops:
+        Make a sliding window of a certain dimension
+        Fit this sliding window over a subset of all the points
+        Fit a third order polynomial to these points
+        Use that polynomial instead of the points for our skeleton -- should not follow the spurs since they start out small 
+            and the main skeleton body will outweigh them.
+    '''
+    def prune_with_sliding_window(self, points, img):
+        #Slide a large-ish window over the entire image. When points are in view, call numpy's polyfit to create a 3rd order
+        #polynomial curve that we replace the skeleton pts with
+        pruned_skeleton = []
+        window_dims = 20 #square window: window_dims * window_dims pixels inside
+        min_x = 0 #TODO: find the min bound based on the skeleton to constrain the sliding window a little more
+        min_y = 0 #TODO: find the min bound based on the skeleton
+        max_x = img.shape[1]
+        max_y = img.shape[0]
+
+        for x in range(0, max_x - window_dims, window_dims): #start, end, step (all positions of the top left corner of the sliding window)
+            for y in range(0, max_y - window_dims, window_dims):
+                points_in_window = self.find_points_in_bounds(x, y, window_dims, points)
+                x_vals = []
+                y_vals = []
+                #split the points into x and y coordinate lists:
+                for pt in points_in_window:
+                    pt_x = pt[0]
+                    pt_y = pt[1]
+                    x_vals.append(pt_x)
+                    y_vals.append(pt_y)
+                #call numpy.polyfit with degree 3
+                if len(points_in_window) > 0:
+                    coefficients = np.polynomial.polynomial.polyfit(x_vals, y_vals, 3)
+                    #print("Obtained coefficients.")
+                    #now, we can make a function of the form y = c0 + c1*x + c2*x^2 + c3*x^3 that fits the points in the window the most closely
+                    #pass the original x values in to get the right fit polynomial.
+                    #TODO: try going from the smallest value of x to the largest value of x with a small step value.
+                    new_x_vals = []
+                    for xv in range(min(x_vals), max(x_vals), 1):
+                        new_x_vals.append(xv)
+                    fit = np.polynomial.polynomial.polyval(new_x_vals, coefficients)
+                    for pos in range(0, len(new_x_vals)):
+                        pruned_skeleton.append(tuple((new_x_vals[pos], fit[pos])))
+                    #plt.plot(x_vals, fit)
+                    #plt.show()
+                    #print("Done with this window.")
+        return pruned_skeleton #TODO: complete implementation
+
+    #Input: x of top-left corner, y of top-left corner, dimensions, and all the points in the skeleton.
+    def find_points_in_bounds(self, x, y, dims, points):
+        pts_in_bounds = []
+        for pt in points:
+            pt_x = pt[0]
+            pt_y = pt[1]
+            max_x = x + dims
+            max_y = y + dims
+            if pt_x < max_x and pt_x > x:
+                if pt_y < max_y and pt_y > y:
+                    pts_in_bounds.append(pt)
+        return pts_in_bounds
+
+
+
+    #Doesn't seem to work as well on the low-res
+    def opencv_distance_transform(self, points, img):
+        shape = img.shape
+        x_dims = shape[1]
+        y_dims = shape[0]
+        im = np.zeros(shape=[y_dims, x_dims], dtype=np.uint8)
+        #make a binary image from the mask:
+        for pt in points:
+            x = pt[0]
+            y = pt[1]
+            im[y][x] = 1
+
+        dist = cv2.distanceTransform(im, cv2.DIST_L2, 0)
+
+        trimmed_mask = []
+        x_dims = dist.shape[1]
+        y_dims = dist.shape[0]
+        for y in range(0, y_dims):
+            for x in range(0, x_dims):
+                if dist[y][x] > 1:
+                    trimmed_mask.append(tuple((x, y)))
+        return trimmed_mask
+
+        #Normalize so we can actually see the difference: (https://stackoverflow.com/questions/8915833/opencv-distance-transform-outputting-an-image-that-looks-exactly-like-the-input)
+        #cv2.normalize(dist, dist, 0.0, 1.0, cv2.NORM_MINMAX)
+        #print(dist.dtype)
+
+        #dist = cv2.GaussianBlur(dist, (3,3), 0)
+        #cv2.imwrite("/Users/kristinagessel/Desktop/blur.tif", dist)
+        #print(dist.dtype)
+
+        #dist = cv2.Laplacian(dist, cv2.CV_64FC1)
+
+        #cv2.imwrite("/Users/kristinagessel/Desktop/out.tif", dist)
+        #print("done")
 
     #Isn't working, not sure why.
     def opencv_skeleton_thinning(self, points, img):
@@ -330,13 +450,6 @@ class MaskExtrapolator:
                     if tuple((pt_x + x, pt_y + y)) in mask:
                         ctr += 1
         return ctr
-
-    '''
-    Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
-    '''
-    def prune_skeleton(self, skeleton):
-        #eliminate 'stray' points that slipped by the skeletonization algorithm
-        return skeleton #TODO
 
     #Taken from TrainingMaskGenerator's implementation
     def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
@@ -656,9 +769,8 @@ class MaskExtrapolator:
                 skeleton.remove(point)
             print("Removed ", len(points_to_remove), " points in this subiteration.")
 
-        #TODO: prune the skeleton
-        skeleton = self.prune_skeleton(skeleton)
         return skeleton
+
 
     '''
     Get how many 01 patterns (not live, live) exist in the ordered set of neighbors, starting from the center top and moving clockwise
@@ -697,6 +809,7 @@ pages = {
     "??" : ["20191126122204", 0],
     "???" : ["20191126132825", 0],
     "????" : ["20200307101907", 10],
+    "?????" : ["20200309085522", 0],
     "lr1" : ["20200217180742", 190] #low res
     },
     "Paris59": { #Note: grey tolerance 35 works well
@@ -709,8 +822,17 @@ pages = {
     }
 }
 
+parser = argparse.ArgumentParser(description="Perform semi-automated segmentation with flood-filling and skeletonization")
+parser.add_argument("pointset_path", type=str, help="Full path to the pointset")
+parser.add_argument("save_path", type=str, help="Path to the output directory.")
+parser.add_argument("page_name", type=str, help="Name of the page.")
+parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
+parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
+parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
+args = parser.parse_args()
+'''
 object = "MS910"
-page = "????"
+page = "?"
 segmentation_number = pages[object][page][0]
 
 paths = {
@@ -734,5 +856,6 @@ num_iterations = 300
 volume_path = paths[object]["high-res"]
 pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
+'''
 
-ex = MaskExtrapolator(volume_path, pointset_path, page, save_path, start_slice, num_iterations)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations)
