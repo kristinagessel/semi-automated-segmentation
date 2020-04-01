@@ -1,4 +1,5 @@
 import argparse
+import json
 
 import VCPSReader as vr
 import ujson
@@ -27,7 +28,7 @@ Scenario:
 5. Repeat 3 & 4 a # of times
 '''
 class MaskExtrapolator:
-    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations):
+    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, load_path):
         self.low_tolerance = 55
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
@@ -52,13 +53,20 @@ class MaskExtrapolator:
         self.flood_fill_data = {}
         self.skeleton_data = {}
 
+        if load_path != None:
+            self.flood_fill_data = self.load_existing_pointset(load_path)
+            while str(self.start_slice) in self.flood_fill_data:
+                self.start_slice += 1
+            #TODO: start from here -- if this pointset has gone deeper than the start slice, then update the start slice and start from the deepest part.
+            # Otherwise, start from the start slice but keep the old points too
+
         print("Doing flood fill for ", num_iterations, " slices...")
         #Do flood fill for this slice
         #10 times for now to test
         for i in range(num_iterations):
 
             #Save periodically
-            if num_iterations % 100 == 0:
+            if num_iterations % 50 == 0:
                 file = open(self.save_path + page + " " + str(num_iterations) + ".txt", "w")
                 ujson.dump(self.flood_fill_data, file, indent=1)
                 file.close()
@@ -113,7 +121,7 @@ class MaskExtrapolator:
 
         height, width, channel = im.shape #grab the image properties for bounds checking later
 
-        avg = int(self.calc_med_pg_width(start_pts, im))
+        width_bound = int(self.calc_med_pg_width(start_pts, im))
 
         #Floodfill Step: Fill all connected points that pass the threshold checks and are in the bounds specified by avg width of the page.
         while stack:
@@ -122,7 +130,7 @@ class MaskExtrapolator:
             x = int(point[0][0])  # point of interest's x (not origin point's x)
             y = int(point[0][1])
             im[y][x] = (255, 0, 0)
-            valid_neighbors = self.floodfill_check_neighbors(im, point, height, width, avg)
+            valid_neighbors = self.floodfill_check_neighbors(im, point, height, width, width_bound)
             for pt in valid_neighbors:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
@@ -130,7 +138,7 @@ class MaskExtrapolator:
         #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
-        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(avg) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
 
         skeleton, img = self.skeletonize(visited, orig_im.copy())
 
@@ -158,7 +166,7 @@ class MaskExtrapolator:
 
         #Pre-process distance transform
         #Distance transform breaks some continuity, but the skeleton has fewer spurs, and it's a bit faster when DT eliminates lots of pixels
-        points = self.opencv_distance_transform(points, img)
+        points = self.opencv_distance_transform(points, img) #could I do this in a sliding window, and take a number below the max value in the window?
         skeleton = self.thin_cloud_continuous(points)
 
 
@@ -175,6 +183,7 @@ class MaskExtrapolator:
         pruned_skeleton = skeleton
         #eliminate 'stray' points that slipped by the skeletonization algorithm
         pruned_skeleton = self.prune_with_sliding_window(skeleton, img)
+        #TODO: try to prune with kernels (might have to be 5x5 or larger)
         return pruned_skeleton
 
     '''
@@ -185,18 +194,19 @@ class MaskExtrapolator:
         Use that polynomial instead of the points for our skeleton -- should not follow the spurs since they start out small 
             and the main skeleton body will outweigh them.
     '''
+    #TODO: Make the skeleton produced by this continuous -- increment y by 1 each time, so we have to do some solving...
     def prune_with_sliding_window(self, points, img):
         #Slide a large-ish window over the entire image. When points are in view, call numpy's polyfit to create a 3rd order
         #polynomial curve that we replace the skeleton pts with
         pruned_skeleton = []
-        window_dims = 20 #square window: window_dims * window_dims pixels inside
+        window_dims = 7 #square window: window_dims * window_dims pixels inside
         min_x = 0 #TODO: find the min bound based on the skeleton to constrain the sliding window a little more
         min_y = 0 #TODO: find the min bound based on the skeleton
         max_x = img.shape[1]
         max_y = img.shape[0]
 
         for x in range(0, max_x - window_dims, window_dims): #start, end, step (all positions of the top left corner of the sliding window)
-            for y in range(0, max_y - window_dims, window_dims):
+            for y in range(0, max_y - window_dims, window_dims-3):
                 points_in_window = self.find_points_in_bounds(x, y, window_dims, points)
                 x_vals = []
                 y_vals = []
@@ -258,7 +268,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 1:
+                if dist[y][x] > 2:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
@@ -416,7 +426,7 @@ class MaskExtrapolator:
         return ctr
 
     #Taken from TrainingMaskGenerator's implementation
-    def floodfill_check_neighbors(self, im, voxel, height, width, avg_width):
+    def floodfill_check_neighbors(self, im, voxel, height, width, width_bound):
         valid_neighbors = []
         x = [-1, 0, 1]
         y = [-1, 0, 1]
@@ -424,7 +434,7 @@ class MaskExtrapolator:
         y_pos = voxel[0][1]
         for i in y: #height
             for j in x: #width
-                if (i != 0 or j != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(voxel[0], voxel[1]) <= math.ceil(avg_width):# #Don't want the center pixel or any out of bounds
+                if (i != 0 or j != 0) and x_pos + j < width-1 and y_pos + i < height-1 and self.calculate_distance_from_origin(voxel[0], voxel[1]) <= math.ceil(width_bound):# #Don't want the center pixel or any out of bounds
                     grey_val = im[y_pos + i][x_pos + j][0]
                     if grey_val > self.low_tolerance: #and grey_val < self.high_tolerance:
                         valid_neighbors.append((x_pos + j, y_pos + i))
@@ -675,6 +685,11 @@ class MaskExtrapolator:
                 neighbor_ctr += 1
         return neighbor_ctr
 
+    def load_existing_pointset(self, path):
+        file = open(path)
+        points = json.loads(file.read())
+        return points
+
 #---------------------------------------------------
 
 #page num : [seg #, start slice]
@@ -685,6 +700,7 @@ pages = {
     "3" : ["20191114133552", 0],
     "11" : ["20191123203022", 0],
     "?" : ["20191126112158", 0],
+    "?600" : ["20200329223634", 600],
     "??" : ["20191126122204", 0],
     "???" : ["20191126132825", 0],
     "????" : ["20200307101907", 10],
@@ -708,6 +724,7 @@ parser.add_argument("page_name", type=str, help="Name of the page.")
 parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
 parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
 parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
+parser.add_argument("load_path", type=str, help="Path to existing point set (if applicable, otherwise leave empty.)", nargs='?', default=None)
 args = parser.parse_args()
 '''
 object = "MS910"
@@ -737,4 +754,4 @@ pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
 '''
 
-ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.load_path)
