@@ -1,4 +1,5 @@
 import argparse
+import glob
 import json
 
 import VCPSReader as vr
@@ -28,7 +29,7 @@ Scenario:
 5. Repeat 3 & 4 a # of times
 '''
 class MaskExtrapolator:
-    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, load_path):
+    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, load_path, pseudo):
         self.low_tolerance = 55
         #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
@@ -36,19 +37,19 @@ class MaskExtrapolator:
         self.save_path = save_path
         self.path_to_volume = vol_path
         self.page = page
-
         self.all_checked_voxels = {}
         self.set_voxels = {}
-
         #Read in the start points
-        self.orig_pts = self.read_points(path_to_pointsets)
+        if pseudo:
+            self.orig_pts = self.load_txt_pointset(path_to_pointsets, start_slice) #Must be in JSON format
+        else:
+            self.orig_pts = self.read_points(path_to_pointsets)
+
         self.fill_pts = self.orig_pts[start_slice].copy()
 
         #Find the slice we'll start with (the first one if multiple were provided)
         self.start_slice = list(self.orig_pts.keys())[0] #the slice for which we have the initial pointset
         self.current_slice = list(self.orig_pts.keys())[0]
-
-        self.slice = start_slice
 
         self.flood_fill_data = {}
         self.skeleton_data = {}
@@ -57,8 +58,21 @@ class MaskExtrapolator:
             self.flood_fill_data = self.load_existing_pointset(load_path)
             while str(self.start_slice) in self.flood_fill_data:
                 self.start_slice += 1
-            #TODO: start from here -- if this pointset has gone deeper than the start slice, then update the start slice and start from the deepest part.
+            #start from here -- if this pointset has gone deeper than the start slice, then update the start slice and start from the deepest part.
             # Otherwise, start from the start slice but keep the old points too
+
+
+            orig_im = cv2.imread(self.img_path + str(self.start_slice) + ".tif")  # open the image of this slice (required by skeletonize)
+            self.fill_pts, img = self.skeletonize(self.flood_fill_data[str(self.start_slice-1)], orig_im)
+            # Save an image showing the skeleton itself for debugging purposes
+            if not os.path.exists(self.save_path + page):
+                os.mkdir(self.save_path + page)
+            cv2.imwrite(self.save_path + page + "/" + str(self.slice-1) + "_skeleton" + ".tif", img)
+
+        self.slice = self.start_slice
+
+        print("Starting from ", self.start_slice)
+
 
         print("Doing flood fill for ", num_iterations, " slices...")
         #Do flood fill for this slice
@@ -83,6 +97,17 @@ class MaskExtrapolator:
         ujson.dump(self.flood_fill_data, file, indent=1)
         file.close()
 
+    def load_txt_pointset(self, path_to_points, slice):
+        start_pts = {}
+        start_pts[slice] = []
+
+        file = open(path_to_points)
+        for line in file:
+            line = line.split(',')
+            point = tuple((int(line[0].rstrip()), int(line[1].rstrip())))
+            start_pts[slice].append(point) #TODO: split on comma, x is first, y is second. Append as a tuple (x, y)
+        return start_pts #TODO
+
     '''
     Read pointsets.vcps and put the contents into a dictionary.
     '''
@@ -104,7 +129,8 @@ class MaskExtrapolator:
         stack = []
         visited = []
         start_pts = []
-        orig_im = cv2.imread(self.img_path + slice_num + ".tif")  # open the image of this slice
+        path = (self.img_path + slice_num + ".tif")
+        orig_im = cv2.imread(path)  # open the image of this slice
         im = orig_im.copy()
 
         #Filter Step: Remove points from the prior page skeleton that are now on too dark/light voxels according to the threshold.
@@ -170,12 +196,13 @@ class MaskExtrapolator:
         skeleton = self.thin_cloud_continuous(points)
 
 
-        skeleton = self.prune_skeleton(skeleton, img)
+        #skeleton = self.prune_skeleton(skeleton, img)
 
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
 
+    #TODO: investigate detecting intersection points and removing the shortest branch from the intersection.... Might work!
     '''
     Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
     '''
@@ -200,13 +227,13 @@ class MaskExtrapolator:
         #polynomial curve that we replace the skeleton pts with
         pruned_skeleton = []
         window_dims = 7 #square window: window_dims * window_dims pixels inside
-        min_x = 0 #TODO: find the min bound based on the skeleton to constrain the sliding window a little more
-        min_y = 0 #TODO: find the min bound based on the skeleton
+        min_x = min(points)[0] #TODO: find the min bound based on the skeleton to constrain the sliding window a little more
+        min_y = min(points)[1] #TODO: find the min bound based on the skeleton
         max_x = img.shape[1]
         max_y = img.shape[0]
 
-        for x in range(0, max_x - window_dims, window_dims): #start, end, step (all positions of the top left corner of the sliding window)
-            for y in range(0, max_y - window_dims, window_dims-3):
+        for x in range(min_x-1, max_x - window_dims, int(window_dims/2)): #start, end, step (all positions of the top left corner of the sliding window)
+            for y in range(min_y-1, max_y - window_dims, int(window_dims/2)):
                 points_in_window = self.find_points_in_bounds(x, y, window_dims, points)
                 x_vals = []
                 y_vals = []
@@ -686,8 +713,10 @@ class MaskExtrapolator:
         return neighbor_ctr
 
     def load_existing_pointset(self, path):
-        file = open(path)
+        mask = glob.glob(path + "*[0-9].txt")
+        file = open(mask[0])
         points = json.loads(file.read())
+        file.close()
         return points
 
 #---------------------------------------------------
@@ -701,6 +730,7 @@ pages = {
     "11" : ["20191123203022", 0],
     "?" : ["20191126112158", 0],
     "?600" : ["20200329223634", 600],
+    "?1100" : ["20200402121109", 1100],
     "??" : ["20191126122204", 0],
     "???" : ["20191126132825", 0],
     "????" : ["20200307101907", 10],
@@ -725,6 +755,7 @@ parser.add_argument("volume_path", type=str, help="Path to the directory contain
 parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
 parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
 parser.add_argument("load_path", type=str, help="Path to existing point set (if applicable, otherwise leave empty.)", nargs='?', default=None)
+parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data.")
 args = parser.parse_args()
 '''
 object = "MS910"
@@ -754,4 +785,4 @@ pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
 '''
 
-ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.load_path)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.load_path, args.is_pseudo_pointset)
