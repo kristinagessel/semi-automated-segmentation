@@ -4,6 +4,8 @@ import numpy as np
 import argparse
 import random as rng
 
+#From https://docs.opencv.org/3.4/d2/dbd/tutorial_distance_transform.html
+
 rng.seed(12345)
 parser = argparse.ArgumentParser(description='Code for Image Segmentation with Distance Transform and Watershed Algorithm.\
     Sample code showing how to segment overlapping objects using Laplacian filtering, \
