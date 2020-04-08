@@ -8,6 +8,7 @@ import cv2
 import os
 import math
 import numpy as np
+import queue
 
 #import skimage.morphology as skm
 import matplotlib.pyplot as plt
@@ -212,6 +213,60 @@ class MaskExtrapolator:
         pruned_skeleton = self.prune_with_sliding_window(skeleton, img)
         #TODO: try to prune with kernels (might have to be 5x5 or larger)
         return pruned_skeleton
+
+    '''
+    The skeleton has spurs. These are generally short. When spurs occur, an 'intersection' is created where we could step forward 2+ different ways (a pixel is connected 
+    to 3 or more pixels). Can I detect these intersections and then prune the shortest branch reachable from these intersections iteratively until all intersections only have
+    2 pixels connected?
+    '''
+    def remove_shortest_branches(self, skeleton, img):
+        #TODO: detect locations of intersections--pixels connected to 3 or more pixels.
+        #For each intersection:
+        # Find the shortest branch that comes off this intersection. Prune it.
+        # Is it still an intersection? (3+ pixels still connected?) If not, remove it from the intersection list and continue.
+
+        # Find tuple containing min y
+        min_y = min(skeleton, key=lambda t: t[1])
+        # Find tuple containing max y
+        max_y = max(skeleton, key=lambda t: t[1])
+        start_pt = min_y #First starting point
+        #do breadth-first search along the skeleton from the starting point
+        return 0 #TODO
+
+    #Do breadth-first search along a skeleton, recording intersections where the move options are greater than 2 (the px we came from and the next px)
+    def do_bfs(self, start_pt, skeleton):
+        orig_skeleton = skeleton.copy()
+        visited = []
+        is_intersection = []
+        q = queue.Queue()
+
+        while len(visited) != len(skeleton):
+            skeleton = skeleton - visited #list subtraction... Remove the points we have already visited.
+            # Find tuple containing min y --this is typically going to be the most extreme point. (Check for disconnected components)
+            min_y = min(skeleton, key=lambda t: t[1])
+            q.put(min_y)
+            while not q.empty():
+                x = [-1, 0, 1]
+                y = [-1, 0, 1]
+                pt = q.get()
+                visited.append(pt)
+                #check neighbors
+                option_ctr = 0
+                for i in y:  # height
+                    for j in x:  # width
+                        x_ck = pt[0] + j
+                        y_ck = pt[1] + i
+                        pt_ck = tuple((x_ck, y_ck))
+                        #If it's a novel point we haven't visited, it's an option to move forward.
+                        if pt_ck in skeleton and not pt_ck in visited:
+                            option_ctr+=1
+                            q.put(pt_ck)
+                if option_ctr > 1: #If it's not a straight linear path, it branches and may have spurs we want to prune. Add this point to a list to check intersection length later.
+                    is_intersection.append(pt)
+
+
+
+        return 0  # TODO
 
     '''
     Given a skeleton with noisy spurs and loops:
