@@ -617,12 +617,14 @@ class MaskExtrapolator:
             return 0
         return np.average(pt_counts)
 
-    def load_existing_pointset(self, path):
-        mask = glob.glob(path + "*[0-9].txt")
-        file = open(mask[0])
-        points = json.loads(file.read())
-        file.close()
-        return points
+    '''
+    Calculate the euclidean distance between 2 points
+    '''
+    def euclidean_dist(self, src, dest):
+        delta_x = abs(src[0] - dest[0])
+        delta_y = abs(src[1] - dest[1])
+        distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
+        return distance
 
 #---------------------------------------------------
 
