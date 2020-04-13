@@ -106,8 +106,8 @@ class MaskExtrapolator:
         for line in file:
             line = line.split(',')
             point = tuple((int(line[0].rstrip()), int(line[1].rstrip())))
-            start_pts[slice].append(point) #TODO: split on comma, x is first, y is second. Append as a tuple (x, y)
-        return start_pts #TODO
+            start_pts[slice].append(point) #split on comma--x is first, y is second. Append as a tuple (x, y)
+        return start_pts
 
     '''
     Read pointsets.vcps and put the contents into a dictionary.
@@ -166,20 +166,7 @@ class MaskExtrapolator:
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
-
-        #try to eliminate holes in the mask...
-        points = self.fill_holes_in_mask(visited, orig_im.copy())
-        '''im = orig_im.copy()
-        for y in range(0, im.shape[1]):
-            for x in range(0, im.shape[0]):
-                if tuple((x, y)) in points:
-                    im[y][x] = (255, 0, 0)
-        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_filledmask" + ".tif", im)
-        '''
-        #TODO: Is not filling the holes in the mask.
-
-
-        skeleton, img = self.skeletonize(points, orig_im.copy())
+        skeleton, img = self.skeletonize(visited, orig_im.copy())
 
         #Save an image showing the skeleton itself for debugging purposes
         if not os.path.exists(self.save_path + page):
@@ -188,84 +175,40 @@ class MaskExtrapolator:
         return visited, skeleton, slice+1
 
     '''
-    For 2D floodfill:
     Given the flood-filled current slice, seed the next slice.
-    Produce the skeleton of the filled slice, as these will be passed in as seed points in the next round of floodfill.
+    Produce the skeleton of the filled slice, as these skeleton points will be passed in as seed points in the next round of floodfill.
     Inputs: 
         img: image on which to draw the thinned version for testing
         points: all the points making up the mask after flood fill
     '''
     def skeletonize(self, points, img):
-        #Pre-process distance transform
-        #Distance transform breaks some continuity, but the skeleton has fewer spurs, and it's a bit faster when DT eliminates lots of pixels
-        points = self.opencv_distance_transform(points, img) #could I do this in a sliding window, and take a number below the max value in the window?
+        points = self.fill_holes_in_mask(points, img)
+        points = self.opencv_distance_transform(points, img) #could I do this in a sliding window, and take a number below the max value in the window? ('local' distance transform?)
         skeleton = self.thin_cloud_continuous(points)
-
-
-        skeleton = self.prune_skeleton(skeleton, img)
-
+        skeleton = self.prune_skeleton(skeleton)
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
 
+    #Fill the holes in the mask with a closing operation.
     def fill_holes_in_mask(self, mask_pts, img):
-        #TODO: try a closing operation; it should fill holes.
-
         filled_mask = []
         im = self.make_binary_img(mask_pts, img)
-
         kernel = np.ones((5, 5), np.uint8)
-        #dilate = cv2.dilate(im, kernel, iterations=1)
-        #erode = cv2.erode(dilate, kernel, iterations=1)
         closing = cv2.morphologyEx(im, cv2.MORPH_CLOSE, kernel)
-
-        trimmed_mask = []
         x_dims = closing.shape[1]
         y_dims = closing.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
                 if closing[y][x] > 0:
                     filled_mask.append(tuple((x, y)))
-
         return filled_mask
 
-        '''ff_start_pt = tuple((0,0))
-        visited = []
-        all_img_pts = []
-        stack = []
-        stack.append(ff_start_pt)
-        #Plain Flood fill
-        while stack:
-            x = [-1, 0, 1]
-            y = [-1, 0, 1]
-            pt = stack.pop()
-            visited.append(pt)
-            # check neighbors
-            for i in y:  # height
-                for j in x:  # width
-                    x_ck = pt[0] + j
-                    y_ck = pt[1] + i
-                    pt_ck = tuple((x_ck, y_ck))
-                    if pt_ck not in visited and pt_ck not in stack and pt_ck not in mask_pts:
-                        stack.append(pt_ck)
-
-        for x in range(0, img.shape[1]):
-            for y in range(0, img.shape[0]):
-                all_img_pts.append(tuple((x, y)))
-        hole_pts = list((set(all_img_pts) - set(visited)) - set(mask_pts))
-        mask_pts = set(mask_pts).union(set(hole_pts))'''
-
-        #return mask_pts #TODO: implement
-
-    #detect intersection points and remove the shortest branch from the intersection
     '''
     Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
     '''
-    def prune_skeleton(self, skeleton, img):
-        pruned_skeleton = skeleton
-        #eliminate 'stray' points that slipped by the skeletonization algorithm
-        #pruned_skeleton = self.prune_with_sliding_window(skeleton, img)
-        pruned_skeleton = self.remove_shortest_branches(skeleton, img)
+    def prune_skeleton(self, skeleton):
+        pruned_skeleton = self.remove_shortest_branches(skeleton)
         return pruned_skeleton
 
     '''
@@ -273,15 +216,9 @@ class MaskExtrapolator:
     to 3 or more pixels). Can I detect these intersections and then prune the shortest branch reachable from these intersections iteratively until all intersections only have
     2 pixels connected?
     '''
-    def remove_shortest_branches(self, skeleton, img):
-        #TODO: detect locations of intersections--pixels connected to 3 or more pixels.
-        #For each intersection:
-        # Find the shortest branch that comes off this intersection. Prune it.
-        # Is it still an intersection? (3+ pixels still connected?) If not, remove it from the intersection list and continue.
-
-        #do breadth-first search along the skeleton from the starting point
+    def remove_shortest_branches(self, skeleton):
         skeleton = self.do_bfs_find_intersections_and_prune(skeleton, 6)
-        return skeleton #TODO
+        return skeleton
 
     #Do breadth-first search along a skeleton, recording intersections where the move options are greater than 2 (the px we came from and the next px)
     def do_bfs_find_intersections_and_prune(self, skeleton, length_threshold):
@@ -463,19 +400,6 @@ class MaskExtrapolator:
                 if dist[y][x] > 1:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
-
-        #Normalize so we can actually see the difference: (https://stackoverflow.com/questions/8915833/opencv-distance-transform-outputting-an-image-that-looks-exactly-like-the-input)
-        #cv2.normalize(dist, dist, 0.0, 1.0, cv2.NORM_MINMAX)
-        #print(dist.dtype)
-
-        #dist = cv2.GaussianBlur(dist, (3,3), 0)
-        #cv2.imwrite("/Users/kristinagessel/Desktop/blur.tif", dist)
-        #print(dist.dtype)
-
-        #dist = cv2.Laplacian(dist, cv2.CV_64FC1)
-
-        #cv2.imwrite("/Users/kristinagessel/Desktop/out.tif", dist)
-        #print("done")
 
 
     '''Morphological Thinning
@@ -692,190 +616,6 @@ class MaskExtrapolator:
         if math.isnan(np.average(pt_counts)):
             return 0
         return np.average(pt_counts)
-
-    '''
-    "A Fast Parallel Thinning Algorithm for the Binary Image Skeletonization"
-    Deng, Iyengar, Brener
-    Name: OPATA8
-    Supposed to solve the edge cases that foil Zhang Suen; does an asymmetrical thinning approach.
-    NOT fast at all.
-    '''
-    #TODO: pass in the image and check it directly rather than checking the whole list, might speed things up
-    def parallel_thin(self, mask, img):
-        skeleton = mask.copy()
-        #Define the 14 thinning patterns:
-        pruning = True
-        marked_pts = []
-        while pruning:
-            pruning = False
-            for point in skeleton:
-                #get neighbors we care about: (x, y+1) and (x, y-1)
-                x = point[0]
-                y = point[1]
-
-                p0 = int(tuple((x, y + 1)) in skeleton)
-                p1 = int(tuple((x+1, y+1)) in skeleton)
-                p2 = int(tuple((x + 1, y)) in skeleton)
-                p3 = int(tuple((x+1, y-1)) in skeleton)
-                p4 = int(tuple((x, y - 1)) in skeleton)
-                p5 = int(tuple((x-1, y-1)) in skeleton)
-                p6 = int(tuple((x-1, y)) in skeleton)
-                p7 = int(tuple((x-1, y+1)) in skeleton)
-                p8 = int(tuple((x+2, y)) in skeleton)
-                p9 = int(tuple((x, y-2)) in skeleton)
-
-                #Wu and Tsai's 14 thinning patterns; base of this method
-                a = p0 and not p2 and (p1 or p3) and p4 and p5 and p6 and p7
-                b = p0 and p1 and p2 and (p3 or p5) and not p4 and p6 and p7
-                c = p0 and p1 and p2 and p3 and p4 and (p5 or p7) and not p6 and p8
-                d = p2 and p3 and p4 and p5 and p6 and (p1 or p7) and not p0 and p9
-                e = not p0 and not p1 and not p2 and p4 and p6
-                f = p0 and p1 and p2 and not p4 and not p5 and not p6
-                g = p0 and p2 and not p1 and not p3 and not p4 and not p5 and not p6 and not p7
-                h = p0 and not p2 and not p3 and not p4 and p6
-                i = p2 and p3 and p4 and not p0 and not p6 and not p7
-                j = not p0 and not p1 and p2 and not p3 and p4 and not p5 and not p6 and not p7
-                k = not p0 and not p1 and not p2 and p3 and p4 and p5 and not p6 and not p7
-                l = not p0 and not p1 and not p2 and not p3 and not p4 and p5 and p6 and p7
-                m = p0 and p1 and not p2 and not p3 and not p4 and not p5 and not p6 and p7
-                n = not p0 and p1 and p2 and p3 and not p4 and not p5 and not p6 and not p7
-
-                #If any of the above thinning patterns match this pixel and its neighbors, prune the pixel.
-                if(a or b or c or d or e or f or g or h or i or j or k or l or m or n):
-                    skeleton.remove(point)
-                    pruning = True
-
-                #These alone do not eliminate concave points.
-                #TODO: add the changes the authors made to recognize concave areas
-
-        return skeleton
-
-    '''
-    Calculate the euclidean distance between 2 points
-    '''
-    def euclidean_dist(self, src, dest):
-        delta_x = abs(src[0] - dest[0])
-        delta_y = abs(src[1] - dest[1])
-        distance = math.sqrt(delta_x ** 2 + delta_y ** 2)
-        return distance
-
-
-    '''
-    Create a skeleton by thinning the point cloud mask that we have.
-    "A Fast Parallel Algorithm for Thinning Digital Patterns" (Zhang, Suen)
-    '''
-    def thin_cloud_zhang_suen(self, points):
-        #Need: all the mask points--can get those from self.fill_pts
-        iteration_ctr = 0
-        # Get a copy of the current points that are part of the mask. We will remove points from skeleton to skeletonize the mask.
-        skeleton = points.copy()
-        x = [0, 1, 1, 1, 0, -1, -1, -1]
-        y = [1, 1, 0, -1, -1, -1, 0, 1]
-
-        while True:
-            print("Iteration ", iteration_ctr)
-            iteration_ctr += 1
-            eliminated_pt_ctr = 0
-            points_to_remove = []
-
-            #Subiteration 1: (Remove SE boundary and NW corner points)
-            for point in skeleton:
-                x_pos = point[0]
-                y_pos = point[1]
-                neighbors = []
-
-                #start from displacement (0, 1) and proceed counter-clockwise.
-                for disp in range(0, len(y)):  # height
-                        if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
-                            # This neighbor is live and part of the mask
-                            neighbors.append(1)
-                        else:
-                            neighbors.append(0)
-
-                #Point is a candidate for deletion if it has <= 6 and >= 2 neighbors.
-                num_live_neighbors = self.get_num_live_neighbors(neighbors)
-
-                #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
-                num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
-
-                # P2 * P4 * P6 = 0
-                if not (tuple((x_pos, y_pos+1)) in skeleton) or not (tuple((x_pos+1, y_pos)) in skeleton) or not (tuple((x_pos, y_pos-1)) in skeleton):
-                    # P4 * P6 * P8 = 0
-                    if not (tuple((x_pos+1, y_pos)) in skeleton) or not (tuple((x_pos, y_pos-1)) in skeleton) or not (tuple((x_pos-1, y_pos)) in skeleton):
-                        if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
-                            #if point satisfies all of these it should be eliminated; add it to a list to be eliminated.
-                            points_to_remove.append(point)
-                            eliminated_pt_ctr += 1
-            if eliminated_pt_ctr == 0:
-                break
-            eliminated_pt_ctr = 0
-
-            for point in points_to_remove:
-                skeleton.remove(point)
-            print("Removed ", len(points_to_remove), " points in this subiteration.")
-            points_to_remove = []
-
-            #Subiteration 2: (Remove NW boundary and SE corner points)
-            for point in skeleton:
-                x_pos = point[0]
-                y_pos = point[1]
-                neighbors = []
-
-                #start from displacement (0, 1) and proceed counter-clockwise
-                for disp in range(0, len(y)):  # height
-                        if tuple((x_pos + x[disp], y_pos + y[disp])) in skeleton:
-                            # This neighbor is live and part of the mask
-                            neighbors.append(1)
-                        else:
-                            neighbors.append(0)
-
-                #Point is a candidate for deletion if it has <= 6 and >= 2 neighbors.
-                num_live_neighbors = self.get_num_live_neighbors(neighbors)
-
-                #Point is a candidate for deletion if there is one and only one 01 pattern in the ordered set of neighboring points
-                num_zero_one_patterns = self.get_zero_one_patterns(neighbors)
-
-                # P2 * P4 * P8 = 0
-                if not (tuple((x_pos, y_pos+1)) in skeleton) or not (tuple((x_pos+1, y_pos)) in skeleton) or not (tuple((x_pos-1, y_pos)) in skeleton):
-                    # P2 * P6 * P8 = 0
-                    if not(tuple((x_pos, y_pos+1)) in skeleton) or not (tuple((x_pos, y_pos-1)) in skeleton) or not (tuple((x_pos-1, y_pos)) in skeleton):
-                        if num_live_neighbors <= 6 and num_live_neighbors >= 2 and num_zero_one_patterns == 1:
-                            #if point satisfies all of these it should be eliminated; add it to a list to be eliminated.
-                            points_to_remove.append(point)
-                            eliminated_pt_ctr += 1
-            if eliminated_pt_ctr == 0:
-                break
-
-            for point in points_to_remove:
-                skeleton.remove(point)
-            print("Removed ", len(points_to_remove), " points in this subiteration.")
-
-        return skeleton
-
-
-    '''
-    Get how many 01 patterns (not live, live) exist in the ordered set of neighbors, starting from the center top and moving clockwise
-    (Zhang Suen)
-    '''
-    def get_zero_one_patterns(self, neighbors):
-        zero_one_ctr = 0
-        for elem in range(0, len(neighbors)):
-            if neighbors[elem] == 0 and elem+1 < len(neighbors):
-                if neighbors[elem+1] == 1:
-                    zero_one_ctr += 1
-        return zero_one_ctr
-
-    '''
-    How many neighbors does a given point (that is part of the mask) have which are also part of the mask?
-    (Zhang Suen)
-    '''
-    def get_num_live_neighbors(self, neighbor_list):
-        neighbor_ctr = 0
-        for elem in neighbor_list:
-            #If it's a 'live' neighbor (value 1) count it
-            if elem == 1:
-                neighbor_ctr += 1
-        return neighbor_ctr
 
     def load_existing_pointset(self, path):
         mask = glob.glob(path + "*[0-9].txt")
