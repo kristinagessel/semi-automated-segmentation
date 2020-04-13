@@ -32,7 +32,7 @@ Scenario:
 class MaskExtrapolator:
     def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, load_path, pseudo):
         self.low_tolerance = 55
-        #self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
+        self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
         self.img_path = vol_path
         self.save_path = save_path
@@ -63,12 +63,12 @@ class MaskExtrapolator:
             # Otherwise, start from the start slice but keep the old points too
 
 
-            orig_im = cv2.imread(self.img_path + str(self.start_slice) + ".tif")  # open the image of this slice (required by skeletonize)
+            orig_im = cv2.imread(self.img_path + str(self.start_slice).zfill(4) + ".tif")  # open the image of this slice (required by skeletonize)
             self.fill_pts, img = self.skeletonize(self.flood_fill_data[str(self.start_slice-1)], orig_im)
             # Save an image showing the skeleton itself for debugging purposes
             if not os.path.exists(self.save_path + page):
                 os.mkdir(self.save_path + page)
-            cv2.imwrite(self.save_path + page + "/" + str(self.slice-1) + "_skeleton" + ".tif", img)
+            cv2.imwrite(self.save_path + page + "/" + str(self.start_slice-1) + "_skeleton" + ".tif", img)
 
         self.slice = self.start_slice
 
@@ -140,7 +140,7 @@ class MaskExtrapolator:
             y = int(elem[1])
             voxel = im[y][x][0]
 
-            if (voxel > self.low_tolerance):# and voxel < self.high_tolerance):  # check for tears and bright spots (minerals?)
+            if (voxel > self.low_tolerance and voxel < self.high_tolerance):  # check for tears and bright spots (minerals?)
                 stack.append([(x, y), (x, y)])  # append a tuple of ((point), (origin point)) to keep track of how far we are from the original point
                 if x not in self.set_voxels:
                     self.set_voxels[x] = {}
@@ -167,7 +167,19 @@ class MaskExtrapolator:
             os.mkdir(self.save_path + page)
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
 
-        skeleton, img = self.skeletonize(visited, orig_im.copy())
+        #try to eliminate holes in the mask...
+        points = self.fill_holes_in_mask(visited, orig_im.copy())
+        '''im = orig_im.copy()
+        for y in range(0, im.shape[1]):
+            for x in range(0, im.shape[0]):
+                if tuple((x, y)) in points:
+                    im[y][x] = (255, 0, 0)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_filledmask" + ".tif", im)
+        '''
+        #TODO: Is not filling the holes in the mask.
+
+
+        skeleton, img = self.skeletonize(points, orig_im.copy())
 
         #Save an image showing the skeleton itself for debugging purposes
         if not os.path.exists(self.save_path + page):
@@ -184,34 +196,76 @@ class MaskExtrapolator:
         points: all the points making up the mask after flood fill
     '''
     def skeletonize(self, points, img):
-        #skeleton, img = self.thin_cloud(points, img)
-        #skeleton, img = self.do_a_star(img)
-        #skeleton = self.thin_cloud_zhang_suen(points)
-        #skeleton = self.parallel_thin(points, img)
-        #skeleton = self.skimage_thin_cloud(points, img)
-        #skeleton = self.opencv_skeleton_thinning(points, img)
-
         #Pre-process distance transform
         #Distance transform breaks some continuity, but the skeleton has fewer spurs, and it's a bit faster when DT eliminates lots of pixels
         points = self.opencv_distance_transform(points, img) #could I do this in a sliding window, and take a number below the max value in the window?
         skeleton = self.thin_cloud_continuous(points)
 
 
-        #skeleton = self.prune_skeleton(skeleton, img)
+        skeleton = self.prune_skeleton(skeleton, img)
 
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
 
-    #TODO: investigate detecting intersection points and removing the shortest branch from the intersection.... Might work!
+    def fill_holes_in_mask(self, mask_pts, img):
+        #TODO: try a closing operation; it should fill holes.
+
+        filled_mask = []
+        im = self.make_binary_img(mask_pts, img)
+
+        kernel = np.ones((5, 5), np.uint8)
+        #dilate = cv2.dilate(im, kernel, iterations=1)
+        #erode = cv2.erode(dilate, kernel, iterations=1)
+        closing = cv2.morphologyEx(im, cv2.MORPH_CLOSE, kernel)
+
+        trimmed_mask = []
+        x_dims = closing.shape[1]
+        y_dims = closing.shape[0]
+        for y in range(0, y_dims):
+            for x in range(0, x_dims):
+                if closing[y][x] > 0:
+                    filled_mask.append(tuple((x, y)))
+
+        return filled_mask
+
+        '''ff_start_pt = tuple((0,0))
+        visited = []
+        all_img_pts = []
+        stack = []
+        stack.append(ff_start_pt)
+        #Plain Flood fill
+        while stack:
+            x = [-1, 0, 1]
+            y = [-1, 0, 1]
+            pt = stack.pop()
+            visited.append(pt)
+            # check neighbors
+            for i in y:  # height
+                for j in x:  # width
+                    x_ck = pt[0] + j
+                    y_ck = pt[1] + i
+                    pt_ck = tuple((x_ck, y_ck))
+                    if pt_ck not in visited and pt_ck not in stack and pt_ck not in mask_pts:
+                        stack.append(pt_ck)
+
+        for x in range(0, img.shape[1]):
+            for y in range(0, img.shape[0]):
+                all_img_pts.append(tuple((x, y)))
+        hole_pts = list((set(all_img_pts) - set(visited)) - set(mask_pts))
+        mask_pts = set(mask_pts).union(set(hole_pts))'''
+
+        #return mask_pts #TODO: implement
+
+    #detect intersection points and remove the shortest branch from the intersection
     '''
     Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
     '''
     def prune_skeleton(self, skeleton, img):
         pruned_skeleton = skeleton
         #eliminate 'stray' points that slipped by the skeletonization algorithm
-        pruned_skeleton = self.prune_with_sliding_window(skeleton, img)
-        #TODO: try to prune with kernels (might have to be 5x5 or larger)
+        #pruned_skeleton = self.prune_with_sliding_window(skeleton, img)
+        pruned_skeleton = self.remove_shortest_branches(skeleton, img)
         return pruned_skeleton
 
     '''
@@ -225,23 +279,20 @@ class MaskExtrapolator:
         # Find the shortest branch that comes off this intersection. Prune it.
         # Is it still an intersection? (3+ pixels still connected?) If not, remove it from the intersection list and continue.
 
-        # Find tuple containing min y
-        min_y = min(skeleton, key=lambda t: t[1])
-        # Find tuple containing max y
-        max_y = max(skeleton, key=lambda t: t[1])
-        start_pt = min_y #First starting point
         #do breadth-first search along the skeleton from the starting point
-        return 0 #TODO
+        skeleton = self.do_bfs_find_intersections_and_prune(skeleton, 6)
+        return skeleton #TODO
 
     #Do breadth-first search along a skeleton, recording intersections where the move options are greater than 2 (the px we came from and the next px)
-    def do_bfs(self, start_pt, skeleton):
+    def do_bfs_find_intersections_and_prune(self, skeleton, length_threshold):
         orig_skeleton = skeleton.copy()
         visited = []
         is_intersection = []
+        end_pts = []
         q = queue.Queue()
 
-        while len(visited) != len(skeleton):
-            skeleton = skeleton - visited #list subtraction... Remove the points we have already visited.
+        while len(visited) != len(orig_skeleton):
+            skeleton = list(set(skeleton) - set(visited)) #list subtraction... Remove the points we have already visited.
             # Find tuple containing min y --this is typically going to be the most extreme point. (Check for disconnected components)
             min_y = min(skeleton, key=lambda t: t[1])
             q.put(min_y)
@@ -249,24 +300,82 @@ class MaskExtrapolator:
                 x = [-1, 0, 1]
                 y = [-1, 0, 1]
                 pt = q.get()
+                if pt not in visited:
+                    visited.append(pt)
+
+                    #check neighbors
+                    option_ctr = 0
+                    for i in y:  # height
+                        for j in x:  # width
+                                x_ck = pt[0] + j
+                                y_ck = pt[1] + i
+                                pt_ck = tuple((x_ck, y_ck))
+                                #If it's a novel point we haven't visited, it's an option to move forward.
+                                if pt_ck in skeleton:
+                                    option_ctr+=1
+                                    if pt_ck not in visited:
+                                        q.put(pt_ck)
+                    if option_ctr > 3: #If it's not a straight linear path, -p- or p-, it branches and may have spurs we want to prune. Add this point to a list to check intersection length later.
+                        is_intersection.append(pt)
+                    if option_ctr == 1: #If we can only travel one direction, it is a dead end.
+                        end_pts.append(pt)
+            #If the queue is empty, we have explored that entire connected component.
+        print("Found " + str(len(is_intersection)) + " intersections.")
+        pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold)
+        return pruned_skeleton  # TODO
+
+    #could modify to take a length threshold, and if search goes more pixels than that threshold, abort because it's too long.
+    def do_bfs_find_length(self, start, parent, skeleton, length_threshold):
+        #search in a direction from pt away from origin through the skeleton. return the final length of the path.
+        length = 0
+        visited = []
+        path = []
+        q = queue.Queue()
+        visited.append(parent)
+        q.put(start)
+        while(not q.empty()):
+            x = [-1, 0, 1]
+            y = [-1, 0, 1]
+            pt = q.get()
+            if pt not in visited:
                 visited.append(pt)
-                #check neighbors
-                option_ctr = 0
+                #if pt != start:
+                path.append(pt)
+                length += 1
+
+                if length > length_threshold:
+                    return None, None
+
+                # check neighbors
                 for i in y:  # height
                     for j in x:  # width
                         x_ck = pt[0] + j
                         y_ck = pt[1] + i
                         pt_ck = tuple((x_ck, y_ck))
-                        #If it's a novel point we haven't visited, it's an option to move forward.
-                        if pt_ck in skeleton and not pt_ck in visited:
-                            option_ctr+=1
-                            q.put(pt_ck)
-                if option_ctr > 1: #If it's not a straight linear path, it branches and may have spurs we want to prune. Add this point to a list to check intersection length later.
-                    is_intersection.append(pt)
+                        # If it's a novel point we haven't visited, it's an option to move forward.
+                        if pt_ck in skeleton:
+                            if pt_ck not in visited:
+                                q.put(pt_ck)
+        return length, path
 
-
-
-        return 0  # TODO
+    def prune_shortest_branches(self, skeleton, intersection_list, end_pts, length_threshold):
+        x = [-1, 0, 1]
+        y = [-1, 0, 1]
+        for pt in intersection_list:
+            pt_x = pt[0]
+            pt_y = pt[1]
+            for i in y:  # height
+                for j in x:  # width
+                    x_ck = pt[0] + j
+                    y_ck = pt[1] + i
+                    pt_ck = tuple((x_ck, y_ck))
+                    if pt not in end_pts and pt_ck in skeleton:
+                        #go in a direction away from the original point, measure the length until you hit a dead end.
+                        length, pt_path = self.do_bfs_find_length(pt_ck, pt, skeleton, length_threshold)
+                        if length != None and pt_path != None:
+                            print("Pruning " + str(len(pt_path)) + " points.")
+                            skeleton = list(set(skeleton) - set(pt_path)) #remove all the points that make up this too-short path.
+        return skeleton
 
     '''
     Given a skeleton with noisy spurs and loops:
@@ -276,7 +385,6 @@ class MaskExtrapolator:
         Use that polynomial instead of the points for our skeleton -- should not follow the spurs since they start out small 
             and the main skeleton body will outweigh them.
     '''
-    #TODO: Make the skeleton produced by this continuous -- increment y by 1 each time, so we have to do some solving...
     def prune_with_sliding_window(self, points, img):
         #Slide a large-ish window over the entire image. When points are in view, call numpy's polyfit to create a 3rd order
         #polynomial curve that we replace the skeleton pts with
@@ -329,10 +437,7 @@ class MaskExtrapolator:
                     pts_in_bounds.append(pt)
         return pts_in_bounds
 
-
-
-    #Doesn't seem to work as well on the low-res
-    def opencv_distance_transform(self, points, img):
+    def make_binary_img(self, points, img):
         shape = img.shape
         x_dims = shape[1]
         y_dims = shape[0]
@@ -342,6 +447,11 @@ class MaskExtrapolator:
             x = pt[0]
             y = pt[1]
             im[y][x] = 1
+        return im
+
+    #Doesn't seem to work as well on the low-res
+    def opencv_distance_transform(self, points, img):
+        im = self.make_binary_img(points, img)
 
         dist = cv2.distanceTransform(im, cv2.DIST_L2, 0)
 
@@ -350,7 +460,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 2:
+                if dist[y][x] > 1:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
