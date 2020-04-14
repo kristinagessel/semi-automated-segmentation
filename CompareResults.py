@@ -35,18 +35,7 @@ def process_mask(image):
     return instance_dict
 
 
-
-
-'''
-TODO: Mean Squared Error?
-Between:
-    Manually-Annotated Ground Truth and Flood-Filling Network
-    Manually-Annotated Ground Truth and Semi-Automated Segmentation (Need to generate this segmentation)
-    Manually-Annotated Ground Truth and Semi-Automated Segmentation and Bounded Flood-Fill on VC Points (Need to generate semi-automated for these)
-    Flood-Filling Network and Manually-Annotated Ground Truth (Over time, try all the inference results I have and compare them. Hopefully the error declines with more training.)
-'''
-
-
+#TODO: can calculate the IoU of the flood-fill from VC points only for a single image -- slice 0 of the ground truth and mask.
 '''
 Intersection Over Union (IoU) (Entire Instance Mask?)
 Calculating IoU of masks.
@@ -87,7 +76,7 @@ Calculate precision and recall metrics
 Between:
     Manually-Annotated Ground Truth and Flood-Filling Network
     Manually-Annotated Ground Truth and Semi-Automated Segmentation (Need to generate this segmentation)
-    Manually-Annotated Ground Truth and Semi-Automated Segmentation and Bounded Flood-Fill on VC Points (Need to generate semi-automated for these)
+    Manually-Annotated Ground Truth and Semi-Automated Segmentation and Bounded Flood-Fill on VC Points (Not possible because I can't load synthetic subvolume in VC)
 Input: OpenCV images of the ground truth and the segmentation
 '''
 def precision_and_recall(ground_truth, segmentation):
@@ -133,7 +122,7 @@ def pixel_accuracy(ground_truth, segmentation, pixel_num):
     #To determine which segmentation belongs to which ground truth, at least some of the pixels between both have to be the same.
     #Perhaps do an intersection between them and see which intersection has the greatest overlap. Then, go with that for checking true positives.
     #find true positives (agree across ground truth and segmentation that it is page)
-    max_intersection = 0
+    max_intersection = set()
     true_negatives = 0 #Initialize to make PyCharm happy
     false_negatives = []
     false_positives = []
@@ -142,7 +131,7 @@ def pixel_accuracy(ground_truth, segmentation, pixel_num):
         for seg_list_elem in segmentation:
             intersect = set(ground_truth[gt_list_elem]).intersection(set(segmentation[seg_list_elem]))
             # Trying to find the instance with the most overlap to judge from since these pages don't have clean labels that will agree with the ground truth:
-            if intersect > max_intersection:
+            if len(intersect) > len(max_intersection):
                 max_intersection = intersect
 
                 # False negatives would be the set difference of ground truth - segmentation
@@ -154,15 +143,26 @@ def pixel_accuracy(ground_truth, segmentation, pixel_num):
                 #True negatives is the intersection of the inverse of the masks? Or the entire size of the image minus the sum of all of the 3 above?
                 true_negatives = pixel_num - len(max_intersection) - len(false_negatives) - len(false_positives)
 
-            print("Computed intersection")
+            #print("Computed intersection")
         true_positives = max_intersection
-        accuracy = (len(true_positives) + len(true_negatives)) / (len(true_positives) + len(true_negatives) + len(false_positives) + len(false_negatives))
+        if (len(true_positives) + true_negatives + len(false_positives) + len(false_negatives)) > 0:
+            accuracy = (len(true_positives) + true_negatives) / (len(true_positives) + true_negatives + len(false_positives) + len(false_negatives))
+        else:
+            accuracy = 0
         accuracy_list.append(accuracy)
+    avg_accuracy = np.average(accuracy_list)
+    return avg_accuracy
 
 
 
 def pixel_wise_difference(ground_truth_mask, segmentation_mask):
-    return len(ground_truth_mask) - len(segmentation_mask) #return the pixel-wise difference (+ if ground truth mask has more, - if segmentation mask has more)
+    difference_list = []
+    for i, gt_img in enumerate(sorted(glob.glob(os.path.join(args.ground_truth_path, "*")))):
+        for j, seg_img in enumerate(sorted(glob.glob(os.path.join(args.segmentation_path, "*")))):
+            if i == j:  # We only care about comparing the same two images.
+                difference = len(ground_truth_mask) - len(segmentation_mask)
+                difference_list.append(difference)
+    return np.average(difference_list) #return the pixel-wise difference (+ if ground truth mask has more, - if segmentation mask has more)
 
 '''
 TODO: Point Cloud Comparison (Find algorithm)
@@ -171,29 +171,51 @@ Between:
 
 '''
 
+'''
+Execute:
+'''
+def compute_iou_single_image(gt, seg):
+    gt_pts = process_mask(gt)
+    seg_pts = process_mask(seg)
+    result = intersection_over_union(gt_pts, seg_pts)
+    print("IoU: " + str(result))
+
+'''Input: arguments given to the script.'''
+def analyze_3d_volumes(args):
+    complete_iou = []
+    complete_pixel_accuracy = []
+    pixel_difference = []
+
+    # We want the masks, not the skeletons (for semi-automated segmentation)
+    for i, gt_img in enumerate(sorted(glob.glob(os.path.join(args.ground_truth_path, "*")))):
+        for j, seg_img in enumerate(sorted(glob.glob(os.path.join(args.segmentation_path, "*")))):
+            if i == j:  # We only care about comparing the same two images.
+                gt_im = cv2.imread(gt_img, 0)
+                ground_truth_dict = process_mask(gt_im)
+
+                seg_im = cv2.imread(seg_img, 0)
+                seg_dict = process_mask(seg_im)
+
+                # pixel_difference.append(pixel_wise_difference(ground_truth_dict, seg_dict))
+
+                iou_result = intersection_over_union(ground_truth_dict, seg_dict)
+                print(str(i) + " Intersection over union: " + str(iou_result))
+                if not np.math.isnan(iou_result):
+                    complete_iou.append(iou_result)
+                else:
+                    complete_iou.append(0.)
+
+    # print("Average pixel difference: ", np.average(pixel_difference)) #Not helpful.
+    print("Average IoU: ", np.average(complete_iou))
+
+
 
 parser = argparse.ArgumentParser(description="Perform semi-automated segmentation with flood-filling and skeletonization")
 parser.add_argument("ground_truth_path", type=str, help="Path to the ground truth image stack") #The only real ground truth hand-annotated image stack I have is synthetic. I can run semi-automated seg on it maybe, FFN has been.
 parser.add_argument("segmentation_path", type=str, help="Path to the segmentation image stack")
 args = parser.parse_args()
 
-complete_iou = []
+gt_img = cv2.imread(args.ground_truth_path, 0)
+seg_img = cv2.imread(args.segmentation_path, 0)
+compute_iou_single_image(gt_img, seg_img)
 
-#We want the masks, not the skeletons (for semi-automated segmentation)
-for i, gt_img in enumerate(sorted(glob.glob(os.path.join(args.ground_truth_path, "*")))):
-    for j, seg_img in enumerate(sorted(glob.glob(os.path.join(args.segmentation_path, "*")))):
-        if i == j: #We only care about comparing the same two images.
-            gt_im = cv2.imread(gt_img, 0)
-            ground_truth_dict = process_mask(gt_im)
-
-            seg_im = cv2.imread(seg_img, 0)
-            seg_dict = process_mask(seg_im)
-            #TODO: do the metrics assessments, and write them out somewhere
-
-            #TODO: why is it producing nans? investigate
-            iou_result = intersection_over_union(ground_truth_dict, seg_dict)
-            print(str(i) + " Intersection over union: " + str(iou_result))
-            if not np.math.isnan(iou_result):
-                complete_iou.append(iou_result)
-
-print("Average IoU: ", np.average(complete_iou))
