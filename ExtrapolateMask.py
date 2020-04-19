@@ -30,7 +30,7 @@ Scenario:
 5. Repeat 3 & 4 a # of times
 '''
 class MaskExtrapolator:
-    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, load_path, pseudo):
+    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo):
         self.low_tolerance = 55
         self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
 
@@ -48,41 +48,31 @@ class MaskExtrapolator:
 
         self.fill_pts = self.orig_pts[start_slice].copy()
 
+        #TODO: Only enable when I need to create a set of images for visualization purposes.
+        im = cv2.imread(self.img_path + str(self.start_slice).zfill(4) + ".tif")
+        for point in self.fill_pts:
+            x = int(point[0])
+            y = int(point[1])
+            pixel = im[y][x] #pixel access is BACKWARDS (y, x)
+            cv2.circle(im, (x, y), 2, 255, -1)
+        cv2.imwrite(self.save_path + page + "/" + str(self.start_slice - 1) + "_seed_pts" + ".tif", im)
+        #TODO ^
+
         #Find the slice we'll start with (the first one if multiple were provided)
         self.start_slice = list(self.orig_pts.keys())[0] #the slice for which we have the initial pointset
         self.current_slice = list(self.orig_pts.keys())[0]
 
         self.flood_fill_data = {}
         self.skeleton_data = {}
-
-        if load_path != None:
-            self.flood_fill_data = self.load_existing_pointset(load_path)
-            while str(self.start_slice) in self.flood_fill_data:
-                self.start_slice += 1
-            #start from here -- if this pointset has gone deeper than the start slice, then update the start slice and start from the deepest part.
-            # Otherwise, start from the start slice but keep the old points too
-
-
-            orig_im = cv2.imread(self.img_path + str(self.start_slice).zfill(4) + ".tif")  # open the image of this slice (required by skeletonize)
-            self.fill_pts, img = self.skeletonize(self.flood_fill_data[str(self.start_slice-1)], orig_im)
-            # Save an image showing the skeleton itself for debugging purposes
-            if not os.path.exists(self.save_path + page):
-                os.mkdir(self.save_path + page)
-            cv2.imwrite(self.save_path + page + "/" + str(self.start_slice-1) + "_skeleton" + ".tif", img)
-
         self.slice = self.start_slice
-
         print("Starting from ", self.start_slice)
-
-
         print("Doing flood fill for ", num_iterations, " slices...")
         #Do flood fill for this slice
-        #10 times for now to test
         for i in range(num_iterations):
 
             #Save periodically
-            if num_iterations % 50 == 0:
-                file = open(self.save_path + page + " " + str(num_iterations) + ".txt", "w")
+            if i % 20 == 0:
+                file = open(self.save_path + page + " " + str(i) + ".txt", "w")
                 ujson.dump(self.flood_fill_data, file, indent=1)
                 file.close()
 
@@ -150,6 +140,7 @@ class MaskExtrapolator:
 
         width_bound = int(self.calc_med_pg_width(start_pts, im))
 
+        ctr = 0 #TODO: counter for how frequently to save flood-fill image
         #Floodfill Step: Fill all connected points that pass the threshold checks and are in the bounds specified by avg width of the page.
         while stack:
             point = stack.pop()
@@ -161,6 +152,13 @@ class MaskExtrapolator:
             for pt in valid_neighbors:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
+            if ctr % 20 == 0:
+                # Save the masked image for viewing purposes later
+                if not os.path.exists(self.save_path + page):
+                    os.mkdir(self.save_path + page)
+                cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(
+                    width_bound) + "_threshold=" + str(self.low_tolerance) + ".tif", im)
+
 
         #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
@@ -661,7 +659,6 @@ parser.add_argument("page_name", type=str, help="Name of the page.")
 parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
 parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
 parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
-parser.add_argument("load_path", type=str, help="Path to existing point set (if applicable, otherwise leave empty.)", nargs='?', default=None)
 parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data.")
 args = parser.parse_args()
 '''
@@ -692,4 +689,4 @@ pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
 '''
 
-ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.load_path, args.is_pseudo_pointset)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset)
