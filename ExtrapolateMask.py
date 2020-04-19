@@ -48,16 +48,6 @@ class MaskExtrapolator:
 
         self.fill_pts = self.orig_pts[start_slice].copy()
 
-        #TODO: Only enable when I need to create a set of images for visualization purposes.
-        im = cv2.imread(self.img_path + str(self.start_slice).zfill(4) + ".tif")
-        for point in self.fill_pts:
-            x = int(point[0])
-            y = int(point[1])
-            pixel = im[y][x] #pixel access is BACKWARDS (y, x)
-            cv2.circle(im, (x, y), 2, 255, -1)
-        cv2.imwrite(self.save_path + page + "/" + str(self.start_slice - 1) + "_seed_pts" + ".tif", im)
-        #TODO ^
-
         #Find the slice we'll start with (the first one if multiple were provided)
         self.start_slice = list(self.orig_pts.keys())[0] #the slice for which we have the initial pointset
         self.current_slice = list(self.orig_pts.keys())[0]
@@ -140,7 +130,6 @@ class MaskExtrapolator:
 
         width_bound = int(self.calc_med_pg_width(start_pts, im))
 
-        ctr = 0 #TODO: counter for how frequently to save flood-fill image
         #Floodfill Step: Fill all connected points that pass the threshold checks and are in the bounds specified by avg width of the page.
         while stack:
             point = stack.pop()
@@ -152,19 +141,12 @@ class MaskExtrapolator:
             for pt in valid_neighbors:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
-            if ctr % 20 == 0:
-                # Save the masked image for viewing purposes later
-                if not os.path.exists(self.save_path + page):
-                    os.mkdir(self.save_path + page)
-                cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(
-                    width_bound) + "_threshold=" + str(self.low_tolerance) + ".tif", im)
-
 
         #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
-        skeleton, img = self.skeletonize(visited, orig_im.copy())
+        skeleton, img = self.skeletonize(visited, orig_im.copy(), page)
 
         #Save an image showing the skeleton itself for debugging purposes
         if not os.path.exists(self.save_path + page):
@@ -179,11 +161,10 @@ class MaskExtrapolator:
         img: image on which to draw the thinned version for testing
         points: all the points making up the mask after flood fill
     '''
-    def skeletonize(self, points, img):
+    def skeletonize(self, points, img, page):
         points = self.fill_holes_in_mask(points, img)
-        points = self.opencv_distance_transform(points, img) #could I do this in a sliding window, and take a number below the max value in the window? ('local' distance transform?)
-        skeleton = self.thin_cloud_continuous(points)
-        skeleton = self.prune_skeleton(skeleton)
+        skeleton = self.thin_cloud_continuous(points, img, page, slice)
+        skeleton = self.prune_skeleton(skeleton, img, page,slice)
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
@@ -205,8 +186,8 @@ class MaskExtrapolator:
     '''
     Do some cleanup on the skeleton -- remove stray, meaningless branches and smooth the skeleton.
     '''
-    def prune_skeleton(self, skeleton):
-        pruned_skeleton = self.remove_shortest_branches(skeleton)
+    def prune_skeleton(self, skeleton, img, page, slice):
+        pruned_skeleton = self.remove_shortest_branches(skeleton, img, page, slice)
         return pruned_skeleton
 
     '''
@@ -214,12 +195,12 @@ class MaskExtrapolator:
     to 3 or more pixels). Can I detect these intersections and then prune the shortest branch reachable from these intersections iteratively until all intersections only have
     2 pixels connected?
     '''
-    def remove_shortest_branches(self, skeleton):
-        skeleton = self.do_bfs_find_intersections_and_prune(skeleton, 6)
+    def remove_shortest_branches(self, skeleton, img, page, slice):
+        skeleton = self.do_bfs_find_intersections_and_prune(skeleton, 6, img, page, slice)
         return skeleton
 
     #Do breadth-first search along a skeleton, recording intersections where the move options are greater than 2 (the px we came from and the next px)
-    def do_bfs_find_intersections_and_prune(self, skeleton, length_threshold):
+    def do_bfs_find_intersections_and_prune(self, skeleton, length_threshold, img, page, slice):
         orig_skeleton = skeleton.copy()
         visited = []
         is_intersection = []
@@ -235,6 +216,7 @@ class MaskExtrapolator:
                 x = [-1, 0, 1]
                 y = [-1, 0, 1]
                 pt = q.get()
+
                 if pt not in visited:
                     visited.append(pt)
 
@@ -256,11 +238,11 @@ class MaskExtrapolator:
                         end_pts.append(pt)
             #If the queue is empty, we have explored that entire connected component.
         print("Found " + str(len(is_intersection)) + " intersections.")
-        pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold)
-        return pruned_skeleton  # TODO
+        pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold, img, page, slice)
+        return pruned_skeleton
 
     #could modify to take a length threshold, and if search goes more pixels than that threshold, abort because it's too long.
-    def do_bfs_find_length(self, start, parent, skeleton, length_threshold):
+    def do_bfs_find_length(self, start, parent, skeleton, length_threshold, img, page, slice, inter_num):
         #search in a direction from pt away from origin through the skeleton. return the final length of the path.
         length = 0
         visited = []
@@ -293,12 +275,13 @@ class MaskExtrapolator:
                                 q.put(pt_ck)
         return length, path
 
-    def prune_shortest_branches(self, skeleton, intersection_list, end_pts, length_threshold):
+    def prune_shortest_branches(self, skeleton, intersection_list, end_pts, length_threshold, img, page, slice):
         x = [-1, 0, 1]
         y = [-1, 0, 1]
-        for pt in intersection_list:
+        for ctr, pt in enumerate(intersection_list):
             pt_x = pt[0]
             pt_y = pt[1]
+
             for i in y:  # height
                 for j in x:  # width
                     x_ck = pt[0] + j
@@ -306,7 +289,7 @@ class MaskExtrapolator:
                     pt_ck = tuple((x_ck, y_ck))
                     if pt not in end_pts and pt_ck in skeleton:
                         #go in a direction away from the original point, measure the length until you hit a dead end.
-                        length, pt_path = self.do_bfs_find_length(pt_ck, pt, skeleton, length_threshold)
+                        length, pt_path = self.do_bfs_find_length(pt_ck, pt, skeleton, length_threshold, img, page, slice, ctr)
                         if length != None and pt_path != None:
                             print("Pruning " + str(len(pt_path)) + " points.")
                             skeleton = list(set(skeleton) - set(pt_path)) #remove all the points that make up this too-short path.
@@ -409,7 +392,7 @@ class MaskExtrapolator:
     *****TODO: perhaps try to instead put points into a dictionary like: dict[x][y] for faster lookup? 
     (Then you just check if x and y exist in dictionary. Maybe it's a little faster?)
     '''
-    def thin_cloud_continuous(self, points):
+    def thin_cloud_continuous(self, points, img, page, slice):
         skeleton = points.copy()
 
         while(True):
@@ -417,6 +400,7 @@ class MaskExtrapolator:
             skeleton, thinned_s = self.strip_south_pts(skeleton)
             skeleton, thinned_e = self.strip_east_pts(skeleton)
             skeleton, thinned_w = self.strip_west_pts(skeleton)
+
             #If no thinning occurred in this last iteration, we are finished.
             if not(thinned_n or thinned_s or thinned_e or thinned_w):
                 break
