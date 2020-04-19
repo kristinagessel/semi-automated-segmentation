@@ -10,9 +10,6 @@ import math
 import numpy as np
 import queue
 
-#import skimage.morphology as skm
-import matplotlib.pyplot as plt
-
 '''
 Given an original slice and an original pointset tracing a single page through the slice, extrapolate in 3D to subsequent slices.
 3D floodfill as a start?
