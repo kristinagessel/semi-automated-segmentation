@@ -20,7 +20,7 @@ def combine_semi_automated_masks(path):
 
     complete_file = open(os.path.join(path, "complete/complete_masks.txt"), 'w')
     complete_file.write(ujson.dumps(page_data))
-    make_instance_volume(os.path.join(path, "complete/"), "/Volumes/Research/1. Research/Experiments/M910TrainingSubvolumes/grayscale/300/synthetic_x83_y1347_s0")
+    make_instance_volume(os.path.join(path, "complete/"), "/Volumes/Research/1. Research/Experiments/M910TrainingSubvolumes/grayscale/300/synthetic_x?_y?_s0")
     return page_data
 
 def make_instance_volume(path_to_complete_dir, path_to_raw_imgs):
