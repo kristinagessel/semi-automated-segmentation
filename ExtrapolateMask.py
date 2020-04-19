@@ -156,8 +156,8 @@ class MaskExtrapolator:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
             #TODO: for visualization purposes
-            #Draw the skeleton
-            for point in self.fill_pts:
+            #Draw the seed points
+            for point in skeleton_pts:
                 x = int(point[0])
                 y = int(point[1])
                 cv2.circle(img, (x, y), 2, tuple((0, 0, 255)), -1)
