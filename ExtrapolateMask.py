@@ -51,6 +51,16 @@ class MaskExtrapolator:
 
         self.fill_pts = self.orig_pts[start_slice].copy()
 
+        #TODO: Only enable when I need to create a set of images for visualization purposes.
+        im = cv2.imread(self.img_path + str(start_slice).zfill(4) + ".tif")
+        for point in self.fill_pts:
+            x = int(point[0])
+            y = int(point[1])
+            pixel = im[y][x] #pixel access is BACKWARDS (y, x)
+            cv2.circle(im, (x, y), 2, tuple((0,0,255)), -1)
+        cv2.imwrite(self.save_path + page + "/" + str(start_slice) + "_seed_pts" + ".tif", im)
+        #TODO ^
+
         #Find the slice we'll start with (the first one if multiple were provided)
         self.start_slice = list(self.orig_pts.keys())[0] #the slice for which we have the initial pointset
         self.current_slice = list(self.orig_pts.keys())[0]
@@ -116,6 +126,7 @@ class MaskExtrapolator:
         path = (self.img_path + slice_num + ".tif")
         orig_im = cv2.imread(path)  # open the image of this slice
         im = orig_im.copy()
+        img = orig_im.copy()
 
         #Filter Step: Remove points from the prior page skeleton that are now on too dark/light voxels according to the threshold.
         for elem in skeleton_pts:
@@ -144,12 +155,28 @@ class MaskExtrapolator:
             for pt in valid_neighbors:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
+            #TODO: for visualization purposes
+            #Draw the skeleton
+            for point in self.fill_pts:
+                x = int(point[0])
+                y = int(point[1])
+                cv2.circle(img, (x, y), 2, tuple((0, 0, 255)), -1)
+            for point in visited:
+                x = int(point[0])
+                y = int(point[1])
+                img[y][x] = (255,0,0)
+            # Save the masked image for viewing purposes later
+            if not os.path.exists(self.save_path + page):
+                os.mkdir(self.save_path + page)
+            cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_iter" + str(ctr) + ".tif", img)
+            ctr += 1
+            # TODO ^
 
         #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
-        skeleton, img = self.skeletonize(visited, orig_im.copy(), page)
+        skeleton, img = self.skeletonize(visited, orig_im.copy(), page, slice)
 
         #Save an image showing the skeleton itself for debugging purposes
         if not os.path.exists(self.save_path + page):
@@ -164,11 +191,28 @@ class MaskExtrapolator:
         img: image on which to draw the thinned version for testing
         points: all the points making up the mask after flood fill
     '''
-    def skeletonize(self, points, img, page):
+    def skeletonize(self, points, img, page, slice):
         points = self.fill_holes_in_mask(points, img)
-        points = self.opencv_distance_transform(points, img)
-        skeleton = self.thin_cloud_continuous(points, img, page, slice)
-        skeleton = self.prune_skeleton(skeleton, img, page,slice)
+        #TODO: for visualization purposes
+        im = img.copy()
+        for pt in points:
+            x = int(pt[0])
+            y = int(pt[1])
+            im[y][x] = (255,0,0)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_filled_holes" + ".tif", im)
+        #TODO ^
+        points = self.opencv_distance_transform(points, img) #could I do this in a sliding window, and take a number below the max value in the window? ('local' distance transform?)
+        #TODO: for visualization purposes
+        im = img.copy()
+        for pt in points:
+            x = int(pt[0])
+            y = int(pt[1])
+            #Normalize the blue level so we see a difference:
+            im[y][x] = (255*(im[y][x]/max(map(max, im))),0,0)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_distance_transform" + ".tif", im)
+        #TODO ^
+        skeleton = self.thin_cloud_continuous(points)
+        skeleton = self.prune_skeleton(skeleton)
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
