@@ -10,7 +10,7 @@ import ujson
 
 def merge_txt_files(path):
     pts = {}
-    files = glob.glob(os.path.join(path, "*.txt"))
+    files = glob.glob(os.path.join(path, os.path.join("parts", "*.txt")))
     for file in files:
         f = open(file)
         temp_pts = ujson.load(f)
@@ -20,4 +20,4 @@ def merge_txt_files(path):
     complete_file.write(ujson.dumps(pts))
 
 
-merge_txt_files("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/?/new_pruning/all_txt")
+merge_txt_files("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/?????/txt/")

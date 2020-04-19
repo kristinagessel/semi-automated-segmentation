@@ -191,6 +191,7 @@ def analyze_3d_volumes(args):
         for j, seg_img in enumerate(sorted(glob.glob(os.path.join(args.segmentation_path, "*")))):
             if i == j:  # We only care about comparing the same two images.
                 gt_im = cv2.imread(gt_img, 0)
+                #print("Opened " + gt_img)
                 ground_truth_dict = process_mask(gt_im)
 
                 seg_im = cv2.imread(seg_img, 0)
@@ -215,7 +216,8 @@ parser.add_argument("ground_truth_path", type=str, help="Path to the ground trut
 parser.add_argument("segmentation_path", type=str, help="Path to the segmentation image stack")
 args = parser.parse_args()
 
-gt_img = cv2.imread(args.ground_truth_path, 0)
-seg_img = cv2.imread(args.segmentation_path, 0)
-compute_iou_single_image(gt_img, seg_img)
+#gt_img = cv2.imread(args.ground_truth_path, 0)
+#seg_img = cv2.imread(args.segmentation_path, 0)
+#compute_iou_single_image(gt_img, seg_img)
+analyze_3d_volumes(args)
 

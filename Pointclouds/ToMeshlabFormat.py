@@ -19,7 +19,7 @@ to a format readable by Meshlab, like (X Y Z R G B\n X Y Z R G B\n ...)
 We have X and Y, Z increments by 1 each slice.
 '''
 def convertJSONToXYZ(path, out_path, volume_path):
-    files = glob.glob(path + "*.txt")
+    files = glob.glob(os.path.join(path, "*.txt"))
 
     for file in files:
         pg_file = os.path.basename(file)
@@ -28,8 +28,8 @@ def convertJSONToXYZ(path, out_path, volume_path):
         output = ujson.loads(f.read())  # get the dictionary
         f.close()
 
-        out_file = open(out_path + str(page) + "_pointset.txt", "w")
-        z = 0
+        out_file = open(os.path.join(out_path, str(page) + "_pointset.txt"), "w")
+        z = 0 #TODO: change this to match the slice we're on.
 
         for slice in output:
             slice_num = slice.zfill(4)
