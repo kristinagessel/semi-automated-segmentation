@@ -15,12 +15,12 @@ def CreateSubvolume(top_left_corner, width, height, z, start_slice, img_path, ou
         img_name = str(slice).zfill(4) + ".tif"
 
         #Load as grayscale (0 as 2nd param allows this)
-        img = cv2.imread(img_path + "/" + img_name, 0)
+        img = cv2.imread(os.path.join(img_path, img_name), 0)
 
         #crop image to designated corner pts
         cropped_img = img[top_left_corner[1]:top_left_corner[1] + height, top_left_corner[0]:top_left_corner[0] + width]
 
-        cv2.imwrite(out_path + "/" + img_name, cropped_img)
+        cv2.imwrite(os.path.join(out_path, img_name), cropped_img)
     return out_path
 
 #Adapted to TIF based on a utility available with Januszewski et. al.'s Flood-Filling Network
