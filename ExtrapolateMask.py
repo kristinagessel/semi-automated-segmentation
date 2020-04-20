@@ -375,7 +375,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 1:
+                if dist[y][x] > 2:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
