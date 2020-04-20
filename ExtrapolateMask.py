@@ -208,11 +208,11 @@ class MaskExtrapolator:
             x = int(pt[0])
             y = int(pt[1])
             #Normalize the blue level so we see a difference:
-            im[y][x] = int(255*(im[y][x][0]/3))
+            im[y][x] = tuple((int(255*(im[y][x][0]/3)), 0, 0))
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_distance_transform" + ".tif", im)
         #TODO ^
-        skeleton = self.thin_cloud_continuous(points)
-        skeleton = self.prune_skeleton(skeleton)
+        skeleton = self.thin_cloud_continuous(points, img, page, slice)
+        skeleton = self.prune_skeleton(skeleton, img, page, slice)
         for vx in skeleton:
             img[int(vx[1])][int(vx[0])] = (0, 255, 0)
         return skeleton, img
@@ -260,11 +260,18 @@ class MaskExtrapolator:
             # Find tuple containing min y --this is typically going to be the most extreme point. (Check for disconnected components)
             min_y = min(skeleton, key=lambda t: t[1])
             q.put(min_y)
+            intersection_ctr = 0 #TODO: for visualization
             while not q.empty():
                 x = [-1, 0, 1]
                 y = [-1, 0, 1]
                 pt = q.get()
-
+                # TODO: for visualization purposes
+                im = img.copy()
+                x_pt = int(pt[0])
+                y_pt = int(pt[1])
+                im[y_pt][x_pt] = (255, 0, 0)
+                cv2.imwrite(self.save_path + page + "/" + str(slice) + "_bfs_finding_intersections" + ".tif", im)
+                # TODO ^
                 if pt not in visited:
                     visited.append(pt)
 
@@ -282,6 +289,16 @@ class MaskExtrapolator:
                                         q.put(pt_ck)
                     if option_ctr > 3: #If it's not a straight linear path, -p- or p-, it branches and may have spurs we want to prune. Add this point to a list to check intersection length later.
                         is_intersection.append(pt)
+                        # TODO: for visualization purposes
+                        im = img.copy()
+                        x_pt = int(pt[0])
+                        y_pt = int(pt[1])
+                        for pts in visited:
+                            im[pts[1]][pts[0]] = (0, 255, 0)
+                        im[y_pt][x_pt] = (0, 0, 255) #Mark the intersection point
+                        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_intersection=" + str(intersection_ctr) + ".tif", im)
+                        intersection_ctr+=1
+                        # TODO ^
                     if option_ctr == 1: #If we can only travel one direction, it is a dead end.
                         end_pts.append(pt)
             #If the queue is empty, we have explored that entire connected component.
@@ -389,12 +406,20 @@ class MaskExtrapolator:
     def thin_cloud_continuous(self, points, img, page, slice):
         skeleton = points.copy()
 
+        ctr = 0 #TODO: for visualization purposes
         while(True):
             skeleton, thinned_n = self.strip_north_pts(skeleton)
             skeleton, thinned_s = self.strip_south_pts(skeleton)
             skeleton, thinned_e = self.strip_east_pts(skeleton)
             skeleton, thinned_w = self.strip_west_pts(skeleton)
-
+            # TODO: for visualization purposes
+            im = img.copy()
+            for pt in points:
+                x = int(pt[0])
+                y = int(pt[1])
+                im[y][x] = (255, 0, 0)
+            cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_mask_thin_iter=" + str(ctr) + ".tif"), im)
+            # TODO ^
             #If no thinning occurred in this last iteration, we are finished.
             if not(thinned_n or thinned_s or thinned_e or thinned_w):
                 break
