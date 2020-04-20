@@ -208,7 +208,7 @@ class MaskExtrapolator:
             x = int(pt[0])
             y = int(pt[1])
             #Normalize the blue level so we see a difference:
-            im[y][x] = (255*(im[y][x]/max(map(max, im))),0,0)
+            im[y][x] = int(255*(im[y][x][0]/3))
         cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_distance_transform" + ".tif", im)
         #TODO ^
         skeleton = self.thin_cloud_continuous(points)
