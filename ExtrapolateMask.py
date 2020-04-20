@@ -155,7 +155,7 @@ class MaskExtrapolator:
             for pt in valid_neighbors:
                 if pt not in visited and tuple(pt) not in (i[0] for i in stack):
                     stack.append((tuple(pt), tuple(point[1])))  # append a tuple of form ((point), (parent's origin point))
-            #TODO: for visualization purposes
+            ''''#TODO: for visualization purposes
             #Draw the seed points
             for point in skeleton_pts:
                 x = int(point[0])
@@ -170,7 +170,7 @@ class MaskExtrapolator:
                 os.mkdir(self.save_path + page)
             cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_iter" + str(ctr) + ".tif", img)
             ctr += 1
-            # TODO ^
+            # TODO ^'''
 
         #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
@@ -419,6 +419,7 @@ class MaskExtrapolator:
                 y = int(pt[1])
                 im[y][x] = (255, 0, 0)
             cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_mask_thin_iter=" + str(ctr) + ".tif"), im)
+            ctr+=1
             # TODO ^
             #If no thinning occurred in this last iteration, we are finished.
             if not(thinned_n or thinned_s or thinned_e or thinned_w):
