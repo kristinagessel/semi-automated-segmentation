@@ -192,7 +192,7 @@ class MaskExtrapolator:
         points: all the points making up the mask after flood fill
     '''
     def skeletonize(self, points, img, page, slice):
-        points = self.fill_holes_in_mask(points, img)
+        points = self.fill_holes_in_mask(points, img, page, slice)
         #TODO: for visualization purposes
         im = img.copy()
         for pt in points:
@@ -218,11 +218,18 @@ class MaskExtrapolator:
         return skeleton, img
 
     #Fill the holes in the mask with a closing operation.
-    def fill_holes_in_mask(self, mask_pts, img):
+    def fill_holes_in_mask(self, mask_pts, img, page, slice):
         filled_mask = []
         im = self.make_binary_img(mask_pts, img)
         kernel = np.ones((5, 5), np.uint8)
         closing = cv2.morphologyEx(im, cv2.MORPH_CLOSE, kernel)
+        dilate = cv2.dilate(im, kernel) # TODO: for visualization
+        erode = cv2.erode(dilate, kernel) #TODO: for visualization
+        # TODO: for visualization purposes
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_dilate" + ".tif", dilate)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_erode" + ".tif", erode)
+        # TODO ^
+
         x_dims = closing.shape[1]
         y_dims = closing.shape[0]
         for y in range(0, y_dims):
@@ -409,16 +416,43 @@ class MaskExtrapolator:
         ctr = 0 #TODO: for visualization purposes
         while(True):
             skeleton, thinned_n = self.strip_north_pts(skeleton)
-            skeleton, thinned_s = self.strip_south_pts(skeleton)
-            skeleton, thinned_e = self.strip_east_pts(skeleton)
-            skeleton, thinned_w = self.strip_west_pts(skeleton)
             # TODO: for visualization purposes
             im = img.copy()
-            for pt in points:
+            for pt in skeleton:
                 x = int(pt[0])
                 y = int(pt[1])
                 im[y][x] = (255, 0, 0)
-            cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_mask_thin_iter=" + str(ctr) + ".tif"), im)
+            cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_n_mask_thin_iter=" + str(ctr) + ".tif"), im)
+            ctr+=1
+            # TODO ^
+            skeleton, thinned_s = self.strip_south_pts(skeleton)
+            # TODO: for visualization purposes
+            im = img.copy()
+            for pt in skeleton:
+                x = int(pt[0])
+                y = int(pt[1])
+                im[y][x] = (255, 0, 0)
+            cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_s_mask_thin_iter=" + str(ctr) + ".tif"), im)
+            ctr+=1
+            # TODO ^
+            skeleton, thinned_e = self.strip_east_pts(skeleton)
+            # TODO: for visualization purposes
+            im = img.copy()
+            for pt in skeleton:
+                x = int(pt[0])
+                y = int(pt[1])
+                im[y][x] = (255, 0, 0)
+            cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_e_mask_thin_iter=" + str(ctr) + ".tif"), im)
+            ctr+=1
+            # TODO ^
+            skeleton, thinned_w = self.strip_west_pts(skeleton)
+            # TODO: for visualization purposes
+            im = img.copy()
+            for pt in skeleton:
+                x = int(pt[0])
+                y = int(pt[1])
+                im[y][x] = (255, 0, 0)
+            cv2.imwrite(os.path.join(os.path.join(self.save_path, page), str(slice) + "_w_mask_thin_iter=" + str(ctr) + ".tif"), im)
             ctr+=1
             # TODO ^
             #If no thinning occurred in this last iteration, we are finished.
