@@ -223,11 +223,25 @@ class MaskExtrapolator:
         im = self.make_binary_img(mask_pts, img)
         kernel = np.ones((5, 5), np.uint8)
         closing = cv2.morphologyEx(im, cv2.MORPH_CLOSE, kernel)
-        dilate = cv2.dilate(im, kernel) # TODO: for visualization
-        erode = cv2.erode(dilate, kernel) #TODO: for visualization
+        dilate = cv2.morphologyEx(im, cv2.MORPH_DILATE, kernel) # TODO: for visualization
+        erode = cv2.morphologyEx(dilate, cv2.MORPH_ERODE, kernel) #TODO: for visualization
         # TODO: for visualization purposes
-        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_dilate" + ".tif", dilate)
-        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_erode" + ".tif", erode)
+        x_dims = dilate.shape[1]
+        y_dims = dilate.shape[0]
+        newimg = img.copy()
+        for y in range(0, y_dims):
+            for x in range(0, x_dims):
+                if dilate[y][x] > 0:
+                    newimg[y][x] = (255,0,0)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_dilate" + ".tif", newimg)
+        x_dims = erode.shape[1]
+        y_dims = erode.shape[0]
+        newimg = img.copy()
+        for y in range(0, y_dims):
+            for x in range(0, x_dims):
+                if erode[y][x] > 0:
+                    newimg[y][x] = (255,0,0)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask_erode" + ".tif", newimg)
         # TODO ^
 
         x_dims = closing.shape[1]
@@ -269,16 +283,10 @@ class MaskExtrapolator:
             q.put(min_y)
             intersection_ctr = 0 #TODO: for visualization
             while not q.empty():
+                im = img.copy() #TODO: for visualization
                 x = [-1, 0, 1]
                 y = [-1, 0, 1]
                 pt = q.get()
-                # TODO: for visualization purposes
-                im = img.copy()
-                x_pt = int(pt[0])
-                y_pt = int(pt[1])
-                im[y_pt][x_pt] = (255, 0, 0)
-                cv2.imwrite(self.save_path + page + "/" + str(slice) + "_bfs_finding_intersections" + ".tif", im)
-                # TODO ^
                 if pt not in visited:
                     visited.append(pt)
 
@@ -296,18 +304,16 @@ class MaskExtrapolator:
                                         q.put(pt_ck)
                     if option_ctr > 3: #If it's not a straight linear path, -p- or p-, it branches and may have spurs we want to prune. Add this point to a list to check intersection length later.
                         is_intersection.append(pt)
-                        # TODO: for visualization purposes
-                        im = img.copy()
-                        x_pt = int(pt[0])
-                        y_pt = int(pt[1])
-                        for pts in visited:
-                            im[pts[1]][pts[0]] = (0, 255, 0)
-                        im[y_pt][x_pt] = (0, 0, 255) #Mark the intersection point
-                        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_intersection=" + str(intersection_ctr) + ".tif", im)
-                        intersection_ctr+=1
-                        # TODO ^
+                        im[pt[1]][pt[0]] = (0, 0, 255)  # Mark the intersection point TODO: for visualization
+
                     if option_ctr == 1: #If we can only travel one direction, it is a dead end.
                         end_pts.append(pt)
+                # TODO: for visualization purposes
+                for pts in visited:
+                    im[pts[1]][pts[0]] = (0, 255, 0)
+                cv2.imwrite(self.save_path + page + "/" + str(slice) + "_intersection=" + str(intersection_ctr) + ".tif", im)
+                intersection_ctr += 1
+                    # TODO ^
             #If the queue is empty, we have explored that entire connected component.
         print("Found " + str(len(is_intersection)) + " intersections.")
         pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold, img, page, slice)
@@ -360,6 +366,12 @@ class MaskExtrapolator:
                         length, pt_path = self.do_bfs_find_length(pt_ck, pt, skeleton, length_threshold, img, page, slice, ctr)
                         if length != None and pt_path != None:
                             print("Pruning " + str(len(pt_path)) + " points.")
+                            # TODO: for visualization purposes
+                            for pts in pt_path:
+                                img[pts[1]][pts[0]] = (0, 0, 255)
+                            cv2.imwrite(self.save_path + page + "/" + str(slice) + "_pruned_intersection=" + str(intersection_ctr) + ".tif", img)
+                            intersection_ctr += 1
+                            # TODO ^
                             skeleton = list(set(skeleton) - set(pt_path)) #remove all the points that make up this too-short path.
         return skeleton
 
