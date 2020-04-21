@@ -385,9 +385,6 @@ class MaskExtrapolator:
     
     This is the basic implementation given in section 8.6.2 of "Computer Vision", 5th Edition, by E.R. Davies
     On average, it takes 5 minutes to segment a layer. Not good.
-    
-    *****TODO: perhaps try to instead put points into a dictionary like: dict[x][y] for faster lookup? 
-    (Then you just check if x and y exist in dictionary. Maybe it's a little faster?)
     '''
     def thin_cloud_continuous(self, points, img, page, slice):
         skeleton = points.copy()
