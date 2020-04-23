@@ -292,53 +292,6 @@ class MaskExtrapolator:
                             skeleton = list(set(skeleton) - set(pt_path)) #remove all the points that make up this too-short path.
         return skeleton
 
-    '''
-    Given a skeleton with noisy spurs and loops:
-        Make a sliding window of a certain dimension
-        Fit this sliding window over a subset of all the points
-        Fit a third order polynomial to these points
-        Use that polynomial instead of the points for our skeleton -- should not follow the spurs since they start out small 
-            and the main skeleton body will outweigh them.
-    '''
-    def prune_with_sliding_window(self, points, img):
-        #Slide a large-ish window over the entire image. When points are in view, call numpy's polyfit to create a 3rd order
-        #polynomial curve that we replace the skeleton pts with
-        pruned_skeleton = []
-        window_dims = 7 #square window: window_dims * window_dims pixels inside
-        min_x = min(points)[0] #TODO: find the min bound based on the skeleton to constrain the sliding window a little more
-        min_y = min(points)[1] #TODO: find the min bound based on the skeleton
-        max_x = img.shape[1]
-        max_y = img.shape[0]
-
-        for x in range(min_x-1, max_x - window_dims, int(window_dims/2)): #start, end, step (all positions of the top left corner of the sliding window)
-            for y in range(min_y-1, max_y - window_dims, int(window_dims/2)):
-                points_in_window = self.find_points_in_bounds(x, y, window_dims, points)
-                x_vals = []
-                y_vals = []
-                #split the points into x and y coordinate lists:
-                for pt in points_in_window:
-                    pt_x = pt[0]
-                    pt_y = pt[1]
-                    x_vals.append(pt_x)
-                    y_vals.append(pt_y)
-                #call numpy.polyfit with degree 3
-                if len(points_in_window) > 0:
-                    coefficients = np.polynomial.polynomial.polyfit(x_vals, y_vals, 3)
-                    #print("Obtained coefficients.")
-                    #now, we can make a function of the form y = c0 + c1*x + c2*x^2 + c3*x^3 that fits the points in the window the most closely
-                    #pass the original x values in to get the right fit polynomial.
-                    #TODO: try going from the smallest value of x to the largest value of x with a small step value.
-                    new_x_vals = []
-                    for xv in range(min(x_vals), max(x_vals), 1):
-                        new_x_vals.append(xv)
-                    fit = np.polynomial.polynomial.polyval(new_x_vals, coefficients)
-                    for pos in range(0, len(new_x_vals)):
-                        pruned_skeleton.append(tuple((new_x_vals[pos], fit[pos])))
-                    #plt.plot(x_vals, fit)
-                    #plt.show()
-                    #print("Done with this window.")
-        return pruned_skeleton #TODO: complete implementation
-
     #Input: x of top-left corner, y of top-left corner, dimensions, and all the points in the skeleton.
     def find_points_in_bounds(self, x, y, dims, points):
         pts_in_bounds = []
@@ -375,7 +328,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 2:
+                if dist[y][x] > 2.5:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
