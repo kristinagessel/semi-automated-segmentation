@@ -160,6 +160,7 @@ class MaskExtrapolator:
     '''
     def skeletonize(self, points, img, page):
         points = self.fill_holes_in_mask(points, img)
+        points = self.opencv_distance_transform(points, img)
         skeleton = self.thin_cloud_continuous(points, img, page, slice)
         skeleton = self.prune_skeleton(skeleton, img, page,slice)
         for vx in skeleton:
@@ -328,7 +329,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 2.5:
+                if dist[y][x] > 1.5:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
