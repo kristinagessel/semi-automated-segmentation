@@ -29,7 +29,6 @@ def convertJSONToXYZ(path, out_path, volume_path):
         f.close()
 
         out_file = open(os.path.join(out_path, str(page) + "_pointset.txt"), "w")
-        z = 0 #TODO: change this to match the slice we're on.
 
         for slice in output:
             slice_num = slice.zfill(4)
@@ -39,8 +38,7 @@ def convertJSONToXYZ(path, out_path, volume_path):
                 x = int(pt[0])
                 y = int(pt[1])
                 intensity = im[y][x]
-                out_file.write(str(x) + " " + str(y) + " " + str(z) + " " + str(intensity[0]) + " " + str(intensity[1]) + " " + str(intensity[2]) + "\n")
-            z += 1
+                out_file.write(str(x) + " " + str(y) + " " + str(slice) + " " + str(intensity[0]) + " " + str(intensity[1]) + " " + str(intensity[2]) + "\n")
         out_file.close()
 
 parser = argparse.ArgumentParser(description="Create a subvolume with training data in HDF5 format.")
