@@ -15,7 +15,7 @@ def prune_pointset(path, bound):
         new_dict = {k:temp_pts[k] for k in temp_pts if int(k) <= int(bound) and k in temp_pts}
     return new_dict
 
-parser = argparse.ArgumentParser(description="Perform semi-automated segmentation with flood-filling and skeletonization")
+parser = argparse.ArgumentParser(description="Prune pointsets to a specified slice number to eliminate slices with errors.")
 parser.add_argument("pointset_path", type=str, help="Full path to the pointset")
 parser.add_argument("save_path", type=str, help="Path to the output directory.")
 parser.add_argument("upper_bound", type=int, help="Upper bound of the pointset to keep.")

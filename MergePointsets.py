@@ -1,3 +1,4 @@
+import argparse
 import glob
 import os
 import ujson
@@ -20,4 +21,8 @@ def merge_txt_files(path):
     complete_file.write(ujson.dumps(pts))
 
 
-merge_txt_files("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/?????/txt/")
+parser = argparse.ArgumentParser(description="Merge multiple pointsets belonging to the same page into one (JSON) file.")
+parser.add_argument("pointset_path", type=str, help="Full path to the pointset directory with all partial files.")
+args = parser.parse_args()
+
+merge_txt_files(args.pointset_path)
