@@ -20,4 +20,4 @@ def merge_txt_files(path):
     complete_file.write(ujson.dumps(pts))
 
 
-merge_txt_files("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/85/txt/")
+merge_txt_files("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/?????/txt/")

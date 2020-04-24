@@ -239,7 +239,6 @@ class MaskExtrapolator:
         pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold, img, page, slice)
         return pruned_skeleton
 
-    #could modify to take a length threshold, and if search goes more pixels than that threshold, abort because it's too long.
     def do_bfs_find_length(self, start, parent, skeleton, length_threshold, img, page, slice, inter_num):
         #search in a direction from pt away from origin through the skeleton. return the final length of the path.
         length = 0
@@ -277,9 +276,6 @@ class MaskExtrapolator:
         x = [-1, 0, 1]
         y = [-1, 0, 1]
         for ctr, pt in enumerate(intersection_list):
-            pt_x = pt[0]
-            pt_y = pt[1]
-
             for i in y:  # height
                 for j in x:  # width
                     x_ck = pt[0] + j
@@ -329,7 +325,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 1.5:
+                if dist[y][x] > 1:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
@@ -557,7 +553,7 @@ class MaskExtrapolator:
         return distance
 
 #---------------------------------------------------
-
+'''
 #page num : [seg #, start slice]
 pages = {
     "MS910": { #Note: grey tolerance 65 works well
@@ -584,16 +580,6 @@ pages = {
     }
 }
 
-parser = argparse.ArgumentParser(description="Perform semi-automated segmentation with flood-filling and skeletonization")
-parser.add_argument("pointset_path", type=str, help="Full path to the pointset")
-parser.add_argument("save_path", type=str, help="Path to the output directory.")
-parser.add_argument("page_name", type=str, help="Name of the page.")
-parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
-parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
-parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
-parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data.")
-args = parser.parse_args()
-'''
 object = "MS910"
 page = "?"
 segmentation_number = pages[object][page][0]
@@ -620,5 +606,15 @@ volume_path = paths[object]["high-res"]
 pointset_path = paths[object]["pointset"]
 save_path = paths[object]["save"]
 '''
+
+parser = argparse.ArgumentParser(description="Perform semi-automated segmentation with flood-filling and skeletonization")
+parser.add_argument("pointset_path", type=str, help="Full path to the pointset")
+parser.add_argument("save_path", type=str, help="Path to the output directory.")
+parser.add_argument("page_name", type=str, help="Name of the page.")
+parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
+parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
+parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
+parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data.")
+args = parser.parse_args()
 
 ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset)
