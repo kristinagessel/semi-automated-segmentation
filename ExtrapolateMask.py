@@ -1,8 +1,12 @@
 import argparse
 import glob
 import json
+import sys
 
+#To find VCPSReader:
+sys.path.append('VC Tools')
 import VCPSReader as vr
+
 import ujson
 import cv2
 import os
