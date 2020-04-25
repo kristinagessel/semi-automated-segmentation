@@ -1,0 +1,6 @@
+.DS_Store
+.idea/.DS_Store
+.idea/Seg2TrainTools.iml
+.idea/
+venv
+__pycache__

@@ -31,16 +31,17 @@ Scenario:
 5. Repeat 3 & 4 a # of times
 '''
 class MaskExtrapolator:
-    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo):
-        self.low_tolerance = 55
-        self.high_tolerance = 255 #we don't want to pick up the minerals which show up as a bright white
-
+    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo, ff_low_threshold, ff_high_threshold, dt_threshold):
+        self.low_tolerance = ff_low_threshold
+        self.high_tolerance = ff_high_threshold
+        self.dt_threshold = dt_threshold
         self.img_path = vol_path
         self.save_path = save_path
         self.path_to_volume = vol_path
         self.page = page
         self.all_checked_voxels = {}
         self.set_voxels = {}
+
         #Read in the start points
         if pseudo:
             self.orig_pts = self.load_txt_pointset(path_to_pointsets, start_slice) #Must be in JSON format
@@ -329,7 +330,7 @@ class MaskExtrapolator:
         y_dims = dist.shape[0]
         for y in range(0, y_dims):
             for x in range(0, x_dims):
-                if dist[y][x] > 1:
+                if dist[y][x] > self.dt_threshold:
                     trimmed_mask.append(tuple((x, y)))
         return trimmed_mask
 
@@ -557,60 +558,6 @@ class MaskExtrapolator:
         return distance
 
 #---------------------------------------------------
-'''
-#page num : [seg #, start slice]
-pages = {
-    "MS910": { #Note: grey tolerance 65 works well
-    "1" : ["20191114132257", 0],  #segmentation #, start slice
-    "2" : ["20191125215208", 0],
-    "3" : ["20191114133552", 0],
-    "11" : ["20191123203022", 0],
-    "?" : ["20191126112158", 0],
-    "?600" : ["20200329223634", 600],
-    "?1100" : ["20200402121109", 1100],
-    "??" : ["20191126122204", 0],
-    "???" : ["20191126132825", 0],
-    "????" : ["20200307101907", 10],
-    "?????" : ["20200309085522", 0],
-    "lr1" : ["20200217180742", 190] #low res
-    },
-    "Paris59": { #Note: grey tolerance 35 works well
-        "test" : ["20191204123934", 430], #segmentation #, start slice
-        "test2" : ["20191204125435", 100], #segmentation #, start slice
-        "test3" : ["20191204135310", 100],
-        "test4" : ["20191206191654", 300],
-        "test5" : ["20191206192523", 500],
-        "2ndlayer" : ["2ndlayer", 365]
-    }
-}
-
-object = "MS910"
-page = "?"
-segmentation_number = pages[object][page][0]
-
-paths = {
-    "MS910": {
-        "high-res" : "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/",
-        "low-res" : "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/",
-        "pointset" : "/Volumes/Research/1. Research/MS910.volpkg/paths/" + segmentation_number,
-        "save" : "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/"
-    },
-    "Paris59": {
-        "high-res" : "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/volumes/20190910090730/",
-        "pointset" : "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/paths/" + segmentation_number,
-        "save" : "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/Paris59/"
-    }
-}
-
-
-start_slice = pages[object][page][1]
-num_iterations = 300
-
-volume_path = paths[object]["high-res"]
-pointset_path = paths[object]["pointset"]
-save_path = paths[object]["save"]
-'''
-
 parser = argparse.ArgumentParser(description="Perform semi-automated segmentation with flood-filling and skeletonization")
 parser.add_argument("pointset_path", type=str, help="Full path to the pointset")
 parser.add_argument("save_path", type=str, help="Path to the output directory.")
@@ -618,7 +565,10 @@ parser.add_argument("page_name", type=str, help="Name of the page.")
 parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
 parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
 parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
-parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data.")
+parser.add_argument("-ff_low_threshold", type=int, default=55, help="Flood-fill 'low' gray level threshold. (55 is default.")
+parser.add_argument("-ff_high_threshold", type=int, default=255, help="Flood-fill 'high' gray level threshold. (255 is default.")
+parser.add_argument("-dt_threshold", type=int, default=1.5, help="Threshold for the distance transform step. (1.5 is default.")
+parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data. (Probably not)")
 args = parser.parse_args()
 
-ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset, args.ff_low_threshold, args.ff_high_threshold, args.dt_threshold)
