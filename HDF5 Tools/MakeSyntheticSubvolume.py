@@ -1,5 +1,7 @@
 import argparse
 import glob
+import os
+
 import numpy as np
 import h5py
 
@@ -40,7 +42,7 @@ def ToHDF5(img_dir, out_dir, is_gt):
     #current axes are (z, x, y). Shift them so they are (x, y, z).
     images = np.moveaxis(images, 0, -1)
 
-    with h5py.File(out_dir + "ground_truth.hdf5", 'w') as f:
+    with h5py.File(os.path.join(out_dir, "ground_truth.hdf5"), 'w') as f:
         if is_gt:
             f.create_dataset('stack', data=images, compression='gzip', dtype='uint8')
         else:
@@ -72,6 +74,5 @@ for depth in range(0, args.depth):
         im = shift_right_n(img, disp_from_original)
 
     shift_ctr += 1
-    cv2.imwrite(args.output_path + (str(depth).zfill(4) + ".tif"), im)
+    cv2.imwrite(os.path.join(args.output_path, (str(depth).zfill(4) + ".tif")), im)
 ToHDF5(args.output_path, args.output_path, args.is_ground_truth)
-#TODO: make hdf5

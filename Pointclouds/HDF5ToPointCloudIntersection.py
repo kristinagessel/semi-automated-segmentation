@@ -37,7 +37,6 @@ for z in range(0, dataset.shape[2]):
                 #sample directly from volume
                 color = img[y][x]
                 out_file.write(str(x) + " " + str(y) + " " + str(z) + " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "\n")
-                #print(str(x) + " " + str(y) + " " + str(z) + " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "\n")
 
 f.close()
 out_file.close()

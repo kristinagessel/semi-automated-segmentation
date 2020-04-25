@@ -5,13 +5,6 @@ import cv2
 import argparse
 
 '''
-path_to_json_files = "/Volumes/Research/1. Research/Experiments/TrainingMasksAll/"
-path_to_dense_files = "/Volumes/Research/1. Research/Experiments/meshlab/floodfill/"
-path_to_raw_files = "/Volumes/Research/1. Research/Experiments/meshlab/vc_seg/"
-path_to_raw_pointset_files = "/Volumes/Research/1. Research/Experiments/high_res_output/"
-HI_RES_PATH = "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/"
-
-
 Read JSON
 Convert from a text file (JSON) containing (x, y) coordinates for slices in a volume 
 to a format readable by Meshlab, like (X Y Z R G B\n X Y Z R G B\n ...)
@@ -41,12 +34,10 @@ def convertJSONToXYZ(path, out_path, volume_path):
                 out_file.write(str(x) + " " + str(y) + " " + str(slice) + " " + str(intensity[0]) + " " + str(intensity[1]) + " " + str(intensity[2]) + "\n")
         out_file.close()
 
-parser = argparse.ArgumentParser(description="Create a subvolume with training data in HDF5 format.")
+parser = argparse.ArgumentParser(description="Convert a JSON set of points into something Meshlab can load-- XYZRGB newline format.")
 parser.add_argument("json_path", type=str, help="Full path to JSON file.")
 parser.add_argument("output_path", type=str, help="Path to the output directory.")
 parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume to sample color/gray values from.")
 args = parser.parse_args()
 
 convertJSONToXYZ(args.json_path, args.output_path, args.volume_path)
-#convertJSONToXYZ("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/", "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/meshlab/", "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/")
-#convertJSONToXYZ("/Volumes/Research/1. Research/Experiments/ExtrapolateMask/", "/Volumes/Research/1. Research/Experiments/meshlab/extrapolate_floodfill/")

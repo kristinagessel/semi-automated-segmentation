@@ -1,24 +1,14 @@
+import argparse
+
 import VCPSReader as vr
 import json
 import os
 import cv2
 import re
 
-PATH_TO_OUTPUT_DIR = "/Volumes/Research/1. Research/1. Iowa Examples/VC Renders/"#"/Volumes/Research/1. Research/Experiments/"
-PATH_TO_VOLPKG = "/Volumes/Research/1. Research/"
-
-HI_RES_PATH = PATH_TO_VOLPKG + "MS910.volpkg/volumes/20180122092342"
-LOW_RES_PATH = PATH_TO_VOLPKG + "MS910.volpkg/volumes/20180220092522"
-PATH_TO_HI_RES_WORK_DONE = "/Volumes/Research/1. Research/1. Iowa Examples/VC Renders/" #PATH_TO_VOLPKG + "MS910.volpkg/work-done/hi-res/"
-PATH_TO_LOW_RES_WORK_DONE = PATH_TO_VOLPKG + "MS910.volpkg/work-done/low-res/"
-
-# If you want to read points from a json file instead of parse all over again:
-path_to_high_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/VCPoints/high_res_output/"
-path_to_low_res_json = "/Users/kristinagessel/Desktop/ProjectExperiments/VCPoints/low_res_output/"
-READ_JSON = False
-
-INCLUDE_TEARS = True
-
+'''
+Draw all points that VC created.
+'''
 class Extractor:
     def __init__(self):
         self.path_to_output_dir = PATH_TO_OUTPUT_DIR
@@ -95,7 +85,7 @@ class Extractor:
     def condense_segmentations(self, page, list_of_segs, path_to_segs):
         output = {} #will hold the merged version of all the individual pointsets
         for seg in list_of_segs:
-            output = vr.VCPSReader(path_to_segs + seg + "/pointset.vcps").process_VCPS_file(output)
+            output = vr.VCPSReader(os.path.join(os.path.join(path_to_segs, seg), "pointset.vcps")).process_VCPS_file(output)
         return output
 
 
@@ -109,83 +99,39 @@ class Extractor:
                     return path_to_directory + "/" + str(file)
 
 #-------
-'''
 def main():
-    ex = Extractor()
+    parser = argparse.ArgumentParser(description="Draw the points produced by Volume Cartographer manual segmentations.")
+    parser.add_argument("volume_path", type=str, help="Path to the volume.")
+    parser.add_argument("output_path", type=str, help="Path to the output location.")
+    parser.add_argument("work_done", type=str, help="Full path to the work-done folder where all segmentations are kept.")
+    parser.add_argument("--include_tears", help="Include this flag if you want to see ALL points VC saved regardless of if they are on tears.", action="store_true")
+    parser.add_argument("--load_json", help="Load from json instead of loading from vcps", action="store_true")
+    parser.add_argument("json_path", nargs='?', help="If you want to load from json, provide the path to the json directory.")
+    args = parser.parse_args()
 
-    # page num : seg num
-    pages = {
-        "MS910": {
-            "1": ["20191114132257", 0],  # segmentation #, start slice
-            "2": ["20191125215208", 0],
-            "3": ["20191114133552", 0],
-            "11": ["20191123203022", 0],
-            "?": ["20191126112158", 0],
-            "??": ["20191126122204", 0],
-            "???": ["20191126132825", 0]
-        },
-        "Paris59": {
-            "test": ["20191203113358", 430],  # segmentation #, start slice
-            "stephen1" : ["20190808124935", 725]
-        }
-    }
-
-    object = "Paris59"
-    page = "stephen1"
-    segmentation_number = pages[object][page][0]
-
-    paths = {
-        "MS910": {
-            "high-res": "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180122092342/",
-            "low-res": "/Volumes/Research/1. Research/MS910.volpkg/volumes/20180220092522/",
-            "pointset": "/Volumes/Research/1. Research/MS910.volpkg/paths/" + segmentation_number,
-            "save": "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/MS910/"
-        },
-        "Paris59": {
-            "high-res": "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/volumes/20190910090730/",
-            "pointset": "/Volumes/Research/1. Research/Herculaneum/PHercParisObject59/PHercParisObjet59.volpkg/paths/" + segmentation_number,
-            "save": "/Volumes/Research/1. Research/Experiments/ExtrapolateMask/Paris59/"
-        }
-    }
-
-    start_slice = pages[object][page][1]
-    num_iterations = 15
-
-    volume_path = paths[object]["high-res"]
-    pointset_path = paths[object]["pointset"]
-    save_path = paths[object]["save"]
-
-    output_dictionary = {}
-    output_dictionary = vr.VCPSReader(pointset_path + "/pointset.vcps").process_VCPS_file(output_dictionary)
-    points_of_interest = output_dictionary[start_slice]
-    ex.write_to_txt_file(output_dictionary, page)
-    ex.draw_on_img(ex.get_path_to_slice(start_slice, volume_path), start_slice, points_of_interest, page, INCLUDE_TEARS)
-'''
-
-def main():
-    path_to_volumetric_data = HI_RES_PATH
-    path_to_work_done = PATH_TO_HI_RES_WORK_DONE
+    path_to_volumetric_data = args.volume_path
+    path_to_work_done = args.work_done
 
     ex = Extractor()
 
-    seg_dict = ex.find_all_segmentations(path_to_work_done)
+    seg_dict = ex.find_all_segmentations(args.work_done)
 
-    if READ_JSON:
+    if args.load_json:
         print("Reading JSON...")
         for page in seg_dict:
-            file = open(path_to_high_res_json + page + "_output.txt")
+            file = open(os.path.join(args.json_path, page + "_output.txt"))
             output_dictionary = json.loads(file.read())
 
             for slice_num in output_dictionary:  # for key in dictionary
                 points_of_interest = output_dictionary[slice_num]  # Look for the slice num in the dictionary
-                ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page, INCLUDE_TEARS)
+                ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page, args.include_tears)
     else:
         for page in seg_dict:
-            output_dictionary = ex.condense_segmentations(page, seg_dict[page], path_to_work_done+page+"/")
+            output_dictionary = ex.condense_segmentations(page, seg_dict[page], os.path.join(path_to_work_done, page))
             ex.write_to_txt_file(output_dictionary, page)
 
             for slice_num in output_dictionary:  # for key in dictionary
                 points_of_interest = output_dictionary[slice_num]  # Look for the slice num in the dictionary
-                ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page, INCLUDE_TEARS)
+                ex.draw_on_img(ex.get_path_to_slice(slice_num, path_to_volumetric_data), slice_num, points_of_interest, page, args.include_tears)
 
 main()

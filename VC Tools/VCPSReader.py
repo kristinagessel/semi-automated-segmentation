@@ -16,7 +16,6 @@ class VCPSReader:
 
     @staticmethod
     def parse_VCPS_header(filename):
-        #These regexes stay the same with VCPS--same header
         comments_re = re.compile('^#')
         width_re = re.compile('^width')
         height_re = re.compile('^height')
@@ -96,12 +95,11 @@ class VCPSReader:
                     for idx in range(self._dim):
                             self._data[y, x, idx] = struct.unpack('d', f.read(8))[0]
                             position_values.append(self._data[y, x, idx])
-                    #Add a tuple of (x,y) to the dict with the correct slice number (position_values has: [x, y, z(slice)]
                     self.add_to_dict(position_values[0], position_values[1], position_values[2])
         return self.point_positions
 
 
     def add_to_dict(self, x, y, slice):
         if math.floor(slice) not in self.point_positions:
-            self.point_positions[math.floor(slice)] = [] #init array so it's happy
+            self.point_positions[math.floor(slice)] = []
         self.point_positions[math.floor(slice)].append((x, y))

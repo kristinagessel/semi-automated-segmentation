@@ -270,39 +270,6 @@ def main():
 
     gen = TrainingMaskGenerator()
 
-    '''
-    page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1")
-    page_segs["2"], filtered_pts["2"] = gen.generate_mask_for_pg("2")
-    page_segs["3"], filtered_pts["3"] = gen.generate_mask_for_pg("3")
-    page_segs["4"], filtered_pts["4"] = gen.generate_mask_for_pg("4")
-    page_segs["5"], filtered_pts["5"] = gen.generate_mask_for_pg("5")
-    page_segs["6"], filtered_pts["6"] = gen.generate_mask_for_pg("6")
-    page_segs["7"], filtered_pts["7"] = gen.generate_mask_for_pg("7")
-    page_segs["8"], filtered_pts["8"] = gen.generate_mask_for_pg("8")
-    page_segs["9"], filtered_pts["9"] = gen.generate_mask_for_pg("9")
-    page_segs["10"], filtered_pts["10"] = gen.generate_mask_for_pg("10")
-    page_segs["11"], filtered_pts["11"] = gen.generate_mask_for_pg("11")
-    page_segs["12"], filtered_pts["12"] = gen.generate_mask_for_pg("12")
-    page_segs["13"], filtered_pts["13"] = gen.generate_mask_for_pg("13")
-    page_segs["14"], filtered_pts["14"] = gen.generate_mask_for_pg("14")
-    page_segs["15"], filtered_pts["15"] = gen.generate_mask_for_pg("15")
-    page_segs["16"], filtered_pts["16"] = gen.generate_mask_for_pg("16")
-
-    #page_parts = ["1-1", "1-2"]
-    #page_segs["1"], filtered_pts["1"] = gen.generate_mask_for_pg("1-lowres", page_parts)
-
-    #The following pages are incomplete:
-    #page_segs["17"], filtered_pts["17"] = gen.generate_mask_for_pg("17")
-    #page_segs["18"], filtered_pts["18"] = gen.generate_mask_for_pg("18")
-    '''
-
-
-    #For all pages that we have:
-    #for page in seg_dict:
-    #    page_segs[page] = gen.generate_mask_for_pg(page)
-
-    #page_segs = load_instance_from_txt(PATH_TO_SAVE_OUTPUT)
-
     semantic_master = gen.create_semantic_training_set(page_segs)
     file = open(PATH_TO_SAVE_OUTPUT + "semantic_basic_avg/semantic_pts.txt", "w")
     json.dump(semantic_master, file, indent=1)

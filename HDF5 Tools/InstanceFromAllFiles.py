@@ -13,8 +13,6 @@ parser = argparse.ArgumentParser(description="Read all independent JSON files in
 parser.add_argument("path_to_json_files", type=str, help="Path to the directory containing all the JSON files.")
 parser.add_argument("instance_file_name", type=str, help="Name of the instance file.")
 args = parser.parse_args()
-
-path_to_json_files = "/Volumes/Research/1. Research/Experiments/TrainingMasksAll/instance/"
 files = glob.glob(args.path_to_json_files + "*.txt")
 
 pg_pts = {}
@@ -30,6 +28,6 @@ for file in files:
     for slice in output:
         pg_pts[page][slice] = output[slice]
 print("Finished loading JSON files.")
-file = open(path_to_json_files + "/instance.txt", "w")
+file = open(os.path.join(args.path_to_json_files, "instance.txt"), "w")
 ujson.dump(pg_pts, file, indent=1)
 
