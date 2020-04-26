@@ -31,10 +31,11 @@ Scenario:
 5. Repeat 3 & 4 a # of times
 '''
 class MaskExtrapolator:
-    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo, ff_low_threshold, ff_high_threshold, dt_threshold):
+    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo, ff_low_threshold, ff_high_threshold, dt_threshold, save_interval):
         self.low_tolerance = ff_low_threshold
         self.high_tolerance = ff_high_threshold
         self.dt_threshold = dt_threshold
+        self.save_interval = save_interval
         self.img_path = vol_path
         self.save_path = save_path
         self.path_to_volume = vol_path
@@ -63,7 +64,7 @@ class MaskExtrapolator:
         for i in range(num_iterations):
 
             #Save periodically
-            if i % 20 == 0:
+            if i % save_interval == 0:
                 file = open(self.save_path + page + " " + str(i) + ".txt", "w")
                 ujson.dump(self.flood_fill_data, file, indent=1)
                 file.close()
@@ -568,7 +569,8 @@ parser.add_argument("num_iterations", type=int, help="Number of slices to segmen
 parser.add_argument("-ff_low_threshold", type=int, default=55, help="Flood-fill 'low' gray level threshold. (55 is default.")
 parser.add_argument("-ff_high_threshold", type=int, default=255, help="Flood-fill 'high' gray level threshold. (255 is default.")
 parser.add_argument("-dt_threshold", type=int, default=1.5, help="Threshold for the distance transform step. (1.5 is default.")
+parser.add_argument("-save_interval", type=int, default=20, help="Save a new pointset file after so many slices have beens segmented. (Default 20 slices.)")
 parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data. (Probably not)")
 args = parser.parse_args()
 
-ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset, args.ff_low_threshold, args.ff_high_threshold, args.dt_threshold)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset, args.ff_low_threshold, args.ff_high_threshold, args.dt_threshold, args.save_interval)
