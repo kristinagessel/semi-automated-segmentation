@@ -15,10 +15,8 @@ import numpy as np
 import queue
 
 '''
-Given an original slice and an original pointset tracing a single page through the slice, extrapolate in 3D to subsequent slices.
-3D floodfill as a start?
-Use Voronoi diagrams to find the skeleton in the center of the page, then seed those points on the next slice (if they are on a page?)
-Might want a faster way to skeletonize, or perhaps a different approach altogether?
+Also known as "semi-automated segmentation", created by Kristina Gessel at the University of Kentucky as a Master's project.
+Given an original slice and an original pointset tracing a single page through the slice, extrapolate in 3D to segment subsequent slices.
 '''
 
 '''
