@@ -8,4 +8,4 @@ There are tools to convert the segmentations we create with ExtrapolateMask (see
 The primary script for semi-automated segmentation is ExtrapolateMask (name may change in the future.)
 ExtrapolateMask segments individual pages in a micro-CT scan of a manuscript. It requires an initial set of points specified by a user, which can be passed in as a simple .txt file or from the Digital Restoration Initiative's Volume Cartographer software.
 
-
+The full report can be found here: https://docs.google.com/document/d/1fOpQ29GhEHLT3VVXmVYhUPK-1RFpLviFVw5fBkib9LQ/edit?usp=sharing
