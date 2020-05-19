@@ -66,6 +66,9 @@ class MaskExtrapolator:
                 file = open(self.save_path + page + " " + str(i) + ".txt", "w")
                 ujson.dump(self.flood_fill_data, file, indent=1)
                 file.close()
+                file = open(self.save_path + page + "_skeleton " + str(i) + ".txt", "w")
+                ujson.dump(self.skeleton_data, file, indent=1)
+                file.close()
 
             self.flood_fill_data[self.slice], self.fill_pts, self.slice = self.do_2d_floodfill(self.fill_pts, page, self.slice)
             self.skeleton_data[self.slice] = self.fill_pts
