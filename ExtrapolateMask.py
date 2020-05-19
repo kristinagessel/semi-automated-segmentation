@@ -565,7 +565,7 @@ parser.add_argument("volume_path", type=str, help="Path to the directory contain
 parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
 parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
 parser.add_argument("-ff_low_threshold", type=int, default=55, help="Flood-fill 'low' gray level threshold. (55 is default.")
-parser.add_argument("-ff_high_threshold", type=int, default=255, help="Flood-fill 'high' gray level threshold. (255 is default.")
+parser.add_argument("-ff_high_threshold", type=int, default=256, help="Flood-fill 'high' gray level threshold. (Disabled by default.")
 parser.add_argument("-dt_threshold", type=float, default=1.5, help="Threshold for the distance transform step. (1.5 is default.")
 parser.add_argument("-save_interval", type=int, default=20, help="Save a new pointset file after so many slices have beens segmented. (Default 20 slices.)")
 parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data. (Probably not)")
