@@ -63,10 +63,10 @@ class MaskExtrapolator:
 
             #Save periodically
             if i % save_interval == 0:
-                file = open(self.save_path + page + " " + str(i) + ".txt", "w")
+                file = open(os.path.join(self.save_path, page + " " + str(i) + ".txt"), "w")
                 ujson.dump(self.flood_fill_data, file, indent=1)
                 file.close()
-                file = open(self.save_path + page + "_skeleton " + str(i) + ".txt", "w")
+                file = open(os.path.join(self.save_path,  page + "_skeleton " + str(i) + ".txt"), "w")
                 ujson.dump(self.skeleton_data, file, indent=1)
                 file.close()
 
