@@ -149,7 +149,7 @@ class MaskExtrapolator:
         #Save the masked image for viewing purposes later
         if not os.path.exists(self.save_path + page):
             os.mkdir(self.save_path + page)
-        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_avg=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
+        cv2.imwrite(self.save_path + page + "/" + str(slice) + "_mask" + "_med=" + str(width_bound) + "_threshold=" + str(self.low_tolerance) +  ".tif", im)
         skeleton, img = self.skeletonize(visited, orig_im.copy(), page)
 
         #Save an image showing the skeleton itself for debugging purposes
