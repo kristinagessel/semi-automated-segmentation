@@ -503,20 +503,29 @@ class MaskExtrapolator:
             y_pos = pt[1]
             #from this pt, go left and right from the pixel. Get this length.
             grey_val = im[y_pos][x_pos][0]
-            length_ctr = 1
+            left_length_ctr = 1
+            right_length_ctr = 1
 
             #go left
             while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
                 x_pos -= 1
                 grey_val = im[y_pos][x_pos][0]
-                length_ctr += 1
+                left_length_ctr += 1
+
+            x_pos = pt[0] #Reset x to the seed point.
+            grey_val = im[y_pos][x_pos][0] #Reset the grey value
 
             #go right
             while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
                 x_pos += 1
                 grey_val = im[y_pos][x_pos][0]
-                length_ctr += 1
-            pt_counts.append(length_ctr)
+                right_length_ctr += 1
+
+            #Choose the greater of the two.
+            if left_length_ctr > right_length_ctr:
+                pt_counts.append(left_length_ctr)
+            else:
+                pt_counts.append(right_length_ctr)
 
         if math.isnan(np.median(pt_counts)):
             return 0
@@ -531,20 +540,29 @@ class MaskExtrapolator:
             y_pos = pt[1]
             #from this pt, go left and right from the pixel. Get this length.
             grey_val = im[y_pos][x_pos][0]
-            length_ctr = 1
+            left_length_ctr = 1
+            right_length_ctr = 1
 
             #go left
             while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
                 x_pos -= 1
                 grey_val = im[y_pos][x_pos][0]
-                length_ctr += 1
+                left_length_ctr += 1
+
+            x_pos = pt[0]  # Reset x to the seed point.
+            grey_val = im[y_pos][x_pos][0]  # Reset the grey value
 
             #go right
             while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
                 x_pos += 1
                 grey_val = im[y_pos][x_pos][0]
-                length_ctr += 1
-            pt_counts.append(length_ctr)
+                right_length_ctr += 1
+
+            #Choose the greater of the two.
+            if left_length_ctr > right_length_ctr:
+                pt_counts.append(left_length_ctr)
+            else:
+                pt_counts.append(right_length_ctr)
 
         if math.isnan(np.average(pt_counts)):
             return 0
