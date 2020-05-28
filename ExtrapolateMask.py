@@ -503,29 +503,29 @@ class MaskExtrapolator:
             y_pos = pt[1]
             #from this pt, go up and down from the pixel. Get this length.
             grey_val = im[y_pos][x_pos][0]
-            left_length_ctr = 1
-            right_length_ctr = 1
+            down_length_ctr = 1
+            up_length_ctr = 1
 
             #go down
             while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
                 y_pos -= 1
                 grey_val = im[y_pos][x_pos][0]
-                left_length_ctr += 1
+                down_length_ctr += 1
 
-            x_pos = pt[0] #Reset x to the seed point.
+            y_pos = pt[1] #Reset y to the seed point.
             grey_val = im[y_pos][x_pos][0] #Reset the grey value
 
             #go up
             while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
                 y_pos += 1
                 grey_val = im[y_pos][x_pos][0]
-                right_length_ctr += 1
+                up_length_ctr += 1
 
             #Choose the greater of the two.
-            if left_length_ctr > right_length_ctr:
-                pt_counts.append(left_length_ctr)
+            if down_length_ctr > up_length_ctr:
+                pt_counts.append(down_length_ctr)
             else:
-                pt_counts.append(right_length_ctr)
+                pt_counts.append(up_length_ctr)
 
         if math.isnan(np.median(pt_counts)):
             return 0
