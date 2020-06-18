@@ -17,9 +17,6 @@ def prune_pointset(path, bound):
     return new_dict
 
 def auto_prune_pointset(path):
-    pts = {}
-    new_dict = {}
-    folders = glob.glob(path)
     for dir in os.listdir(path):
         #get the number in "toxx?x?x?"
         regex = re.compile(r'\d+')

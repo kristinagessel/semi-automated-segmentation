@@ -243,10 +243,10 @@ class MaskExtrapolator:
                         end_pts.append(pt)
             #If the queue is empty, we have explored that entire connected component.
         print("Found " + str(len(is_intersection)) + " intersections.")
-        pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold, img, page, slice)
+        pruned_skeleton = self.prune_shortest_branches(orig_skeleton, is_intersection, end_pts, length_threshold)
         return pruned_skeleton
 
-    def do_bfs_find_length(self, start, parent, skeleton, length_threshold, img, page, slice, inter_num):
+    def do_bfs_find_length(self, start, parent, skeleton, length_threshold):
         #search in a direction from pt away from origin through the skeleton. return the final length of the path.
         length = 0
         visited = []
@@ -279,7 +279,7 @@ class MaskExtrapolator:
                                 q.put(pt_ck)
         return length, path
 
-    def prune_shortest_branches(self, skeleton, intersection_list, end_pts, length_threshold, img, page, slice):
+    def prune_shortest_branches(self, skeleton, intersection_list, end_pts, length_threshold):
         x = [-1, 0, 1]
         y = [-1, 0, 1]
         for ctr, pt in enumerate(intersection_list):
@@ -290,7 +290,7 @@ class MaskExtrapolator:
                     pt_ck = tuple((x_ck, y_ck))
                     if pt not in end_pts and pt_ck in skeleton:
                         #go in a direction away from the original point, measure the length until you hit a dead end.
-                        length, pt_path = self.do_bfs_find_length(pt_ck, pt, skeleton, length_threshold, img, page, slice, ctr)
+                        length, pt_path = self.do_bfs_find_length(pt_ck, pt, skeleton, length_threshold)
                         if length != None and pt_path != None:
                             print("Pruning " + str(len(pt_path)) + " points.")
                             skeleton = list(set(skeleton) - set(pt_path)) #remove all the points that make up this too-short path.
@@ -411,8 +411,8 @@ class MaskExtrapolator:
             # check if chi == 2 and sigma != 1:
             # (implied that center pixel is active if it's in the mask, so no need to check)
             if chi == 2 and sigma != 1:
-                if tuple((x + 1, y)) not in mask:
-                    if tuple((x - 1, y)) in mask:
+                if tuple((x + 1, y)) not in mask: # '0'
+                    if tuple((x - 1, y)) in mask: # '1'
                         # remove the pixel from the mask
                         points_to_remove.append(point)
                         thinned = True
