@@ -507,7 +507,7 @@ class MaskExtrapolator:
             up_length_ctr = 1
 
             #go down
-            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
+            while grey_val > self.low_tolerance and y_pos-1 >= 0:# and grey_val < self.high_tolerance:
                 y_pos -= 1
                 grey_val = im[y_pos][x_pos][0]
                 down_length_ctr += 1
@@ -516,7 +516,7 @@ class MaskExtrapolator:
             grey_val = im[y_pos][x_pos][0] #Reset the grey value
 
             #go up
-            while grey_val > self.low_tolerance:# and grey_val < self.high_tolerance:
+            while grey_val > self.low_tolerance and y_pos+1 < im.shape[0]:# and grey_val < self.high_tolerance:
                 y_pos += 1
                 grey_val = im[y_pos][x_pos][0]
                 up_length_ctr += 1
