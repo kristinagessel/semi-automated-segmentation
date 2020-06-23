@@ -29,7 +29,7 @@ Scenario:
 5. Repeat 3 & 4 a # of times
 '''
 class MaskExtrapolator:
-    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo, ff_low_threshold, ff_high_threshold, dt_threshold, save_interval):
+    def __init__(self, vol_path, path_to_pointsets, page, save_path, start_slice, num_iterations, pseudo, ff_low_threshold, ff_high_threshold, dt_threshold, save_interval, manual_thickness):
         self.low_tolerance = ff_low_threshold
         self.high_tolerance = ff_high_threshold
         self.dt_threshold = dt_threshold
@@ -38,6 +38,7 @@ class MaskExtrapolator:
         self.save_path = save_path
         self.path_to_volume = vol_path
         self.page = page
+        self.thickness = manual_thickness
         self.all_checked_voxels = {}
         self.set_voxels = {}
 
@@ -70,7 +71,7 @@ class MaskExtrapolator:
                 ujson.dump(self.skeleton_data, file, indent=1)
                 file.close()
 
-            self.flood_fill_data[self.slice], self.fill_pts, self.slice = self.do_2d_floodfill(self.fill_pts, page, self.slice)
+            self.flood_fill_data[self.slice], self.fill_pts, self.slice = self.do_2d_floodfill(self.fill_pts, page, self.slice, self.thickness)
             self.skeleton_data[self.slice] = self.fill_pts
 
         #Save the final result
@@ -109,7 +110,7 @@ class MaskExtrapolator:
         a. How? Seed using a skeleton of the points? (Voronoi, etc.?)
     3. Do this for 10 or so slices for now to see how it does.
     '''
-    def do_2d_floodfill(self, skeleton_pts, page, slice):
+    def do_2d_floodfill(self, skeleton_pts, page, slice, thickness):
         slice_num = str(slice).zfill(4)
         stack = []
         visited = []
@@ -132,7 +133,10 @@ class MaskExtrapolator:
 
         height, width, channel = im.shape #grab the image properties for bounds checking later
 
-        width_bound = int(self.calc_med_pg_width(start_pts, im))
+        if thickness == 0:
+            width_bound = int(self.calc_med_pg_width(start_pts, im))
+        else:
+            width_bound = thickness
 
         #Floodfill Step: Fill all connected points that pass the threshold checks and are in the bounds specified by avg width of the page.
         while stack:
@@ -585,6 +589,7 @@ parser.add_argument("page_name", type=str, help="Name of the page.")
 parser.add_argument("volume_path", type=str, help="Path to the directory containing the volume.")
 parser.add_argument("start_slice", type=int, help="Slice to begin segmenting on (must correspond with the pointset's slice.)")
 parser.add_argument("num_iterations", type=int, help="Number of slices to segment.")
+parser.add_argument("-thickness", type=int, default=0, help="Set this flag if thickness needs to be manually set by the user (it isn't easy to measure the thickness in the dataset)")
 parser.add_argument("-ff_low_threshold", type=int, default=55, help="Flood-fill 'low' gray level threshold. (55 is default.")
 parser.add_argument("-ff_high_threshold", type=int, default=256, help="Flood-fill 'high' gray level threshold. (Disabled by default.")
 parser.add_argument("-dt_threshold", type=float, default=1.5, help="Threshold for the distance transform step. (1.5 is default.")
@@ -592,4 +597,4 @@ parser.add_argument("-save_interval", type=int, default=20, help="Save a new poi
 parser.add_argument("-pseudo", "--is_pseudo_pointset", action="store_true",  help="Set this flag if this is synthetic training data. (Probably not)")
 args = parser.parse_args()
 
-ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset, args.ff_low_threshold, args.ff_high_threshold, args.dt_threshold, args.save_interval)
+ex = MaskExtrapolator(args.volume_path, args.pointset_path, args.page_name, args.save_path, args.start_slice, args.num_iterations, args.is_pseudo_pointset, args.ff_low_threshold, args.ff_high_threshold, args.dt_threshold, args.save_interval, args.thickness)
