@@ -16,7 +16,7 @@ def prune_pointset(path, bound):
         new_dict = {k:temp_pts[k] for k in temp_pts if int(k) <= int(bound) and k in temp_pts}
     return new_dict
 
-def auto_prune_pointset(path):
+def auto_prune_pointset(path, is_skeleton):
     for dir in os.listdir(path):
         #get the number in "toxx?x?x?"
         regex = re.compile(r'\d+')
@@ -25,7 +25,10 @@ def auto_prune_pointset(path):
         if(not len(numbers) == 0 and dir.find(".txt") == -1):
             try:
                 slice_num = numbers[1] #Always the second set of numbers...
-                file_path = os.path.join(os.path.join(path, dir), slice_num + ".txt")
+                if not is_skeleton:
+                    file_path = os.path.join(os.path.join(path, dir), slice_num + ".txt")
+                else:
+                    file_path = glob.glob(os.path.join(os.path.join(path, dir), r'*skeleton*.txt'))[0]
                 pruned = prune_pointset(file_path, slice_num)
                 pruned_file = open(os.path.join(args.save_path, slice_num + ".txt"), 'w+')
                 ujson.dump(pruned, pruned_file, indent=1)
@@ -36,10 +39,11 @@ def auto_prune_pointset(path):
 parser = argparse.ArgumentParser(description="Prune pointsets to a specified slice number to eliminate slices with errors.")
 parser.add_argument("pointset_path", type=str, help="Full path to the pointset")
 parser.add_argument("save_path", type=str, help="Path to the output directory.")
+parser.add_argument("--skeleton", action="store_true", help="Prune skeleton txt files instead of mask files.")
 args = parser.parse_args()
 
 #dict = prune_pointset(args.pointset_path, args.upper_bound)
-dict = auto_prune_pointset(args.pointset_path)
+dict = auto_prune_pointset(args.pointset_path, args.skeleton)
 
 
 
