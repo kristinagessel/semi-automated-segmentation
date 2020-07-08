@@ -6,9 +6,10 @@ import ujson
 
 
 def thin_pts(path):
-    skel_pts = {}
-    files = sorted(glob.glob(os.path.join(path, os.path.join("parts", "*.txt"))))
+    newpath = os.path.join(path, os.path.join("parts", os.path.join("incomplete", "*.txt")))
+    files = sorted(glob.glob(newpath))
     for file in files:
+        print(file)
         thinned_pts = {}
         f = open(file)
         temp_pts = ujson.load(f)
@@ -17,13 +18,12 @@ def thin_pts(path):
             for n, pt in enumerate(temp_pts[slice]):
                 temp_pts[slice][n] = tuple(pt)
             skeleton = thin_cloud_continuous(temp_pts[slice])
-            skel_pts[slice] = skeleton
             thinned_pts[slice] = skeleton
         #Every finished file will be saved.
-        part_file = open(os.path.join(path, file + "_skeleton.txt"), 'w')
+        filename = os.path.splitext(file)[0]
+        part_file = open(os.path.join(path, filename + "_skeleton.txt"), 'w')
         part_file.write(ujson.dumps(thinned_pts))
-    complete_file = open(os.path.join(path, "full_skeleton.txt"), 'w')
-    complete_file.write(ujson.dumps(skel_pts))
+        f.close()
 
 
 
