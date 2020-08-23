@@ -168,7 +168,7 @@ class VCPSReader:
 
             bar = progressbar.ProgressBar()
             position_values = []
-            for idx in bar(range(int(int(self._size)/3))):
+            for idx in bar(range(int(self._size))):
                 x = struct.unpack('d', f.read(8))[0]
                 y = struct.unpack('d', f.read(8))[0]
                 z = struct.unpack('d', f.read(8))[0]

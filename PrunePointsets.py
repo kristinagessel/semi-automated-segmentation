@@ -2,6 +2,7 @@ import argparse
 import glob
 import os
 import re
+import VCTools.VCPSReader as vr
 
 import ujson
 
@@ -9,11 +10,10 @@ import ujson
 def prune_pointset(path, bound):
     pts = {}
     new_dict = {}
-    files = glob.glob(path)
-    for file in files:
-        f = open(file)
-        temp_pts = ujson.load(f)
-        new_dict = {k:temp_pts[k] for k in temp_pts if int(k) <= int(bound) and k in temp_pts}
+    file = glob.glob(path)[0]
+    f = open(file)
+    temp_pts = ujson.load(f)
+    new_dict = {k:temp_pts[k] for k in temp_pts if int(k) <= int(bound) and k in temp_pts}
     return new_dict
 
 def auto_prune_pointset(path, is_skeleton):
@@ -23,17 +23,27 @@ def auto_prune_pointset(path, is_skeleton):
         print(dir)
         numbers = regex.findall(dir)
         if(not len(numbers) == 0 and dir.find(".txt") == -1):
-            try:
-                slice_num = numbers[1] #Always the second set of numbers...
-                if not is_skeleton:
-                    file_path = os.path.join(os.path.join(path, dir), slice_num + ".txt")
+            #try:
+            file_path = None
+            slice_num = numbers[1]  # Always the second set of numbers...
+            if not is_skeleton:
+                file_path = os.path.join(os.path.join(path, dir), slice_num + ".txt")
+            else:
+                file_path = glob.glob(os.path.join(os.path.join(path, dir), r'*skeleton*.txt'))
+                if len(file_path) == 0:
+                    file_path = glob.glob(os.path.join(os.path.join(path, dir), "pointset.vcps"))[0]
+                    pointset = vr.VCPSReader(file_path).process_unordered_VCPS_file({})
+                    file = open(os.path.join(os.path.join(path, dir), slice_num + "_skeleton.txt"), "w")
+                    file.write(ujson.dumps(pointset, indent=1))
+                    file.close()
+                    file_path = os.path.join(os.path.join(path, dir), slice_num + "_skeleton.txt")
                 else:
-                    file_path = glob.glob(os.path.join(os.path.join(path, dir), r'*skeleton*.txt'))[0]
+                    file_path = file_path[0]
                 pruned = prune_pointset(file_path, slice_num)
                 pruned_file = open(os.path.join(args.save_path, slice_num + ".txt"), 'w+')
                 ujson.dump(pruned, pruned_file, indent=1)
-            except:
-                print("Error with directory " + dir)
+            #except:
+            #    print("Error with directory " + dir)
 
 
 parser = argparse.ArgumentParser(description="Prune pointsets to a specified slice number to eliminate slices with errors.")
