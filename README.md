@@ -1,5 +1,6 @@
 # semi-automated-segmentation
 This project was created by Kristina Gessel at the University of Kentucky as a Master's project. (2019-2020)
+Most of this code has been retired in favor of a faster C++ implementation.
 
 The repository contains several helper scripts. 
 This project investigates supervised machine learning methods for volumetric segmentation of a manuscript as well, so there are simple HDF5 tools for converting a labeled subvolume into HDF5 for the tested neural network.
