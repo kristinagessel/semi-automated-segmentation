@@ -11,6 +11,7 @@ class VCPSReader:
     def __init__(self, path):
         self._path = path
         self.point_positions = {}
+        self.val_type = 'double'
 
         ppm_path_stem, _ = os.path.splitext(self._path)
 
@@ -35,7 +36,7 @@ class VCPSReader:
                     ordering = line.split(': ')[1].strip() == 'true'
                 elif type_re.match(line):
                     val_type = line.split(': ')[1].strip()
-                    assert val_type in ['double']
+                    assert val_type in ['double', 'int']
                 elif version_re.match(line):
                     version = line.split(': ')[1].strip()
                 elif size_re.match(line):
@@ -169,9 +170,16 @@ class VCPSReader:
             bar = progressbar.ProgressBar()
             position_values = []
             for idx in bar(range(int(self._size))):
-                x = struct.unpack('d', f.read(8))[0]
-                y = struct.unpack('d', f.read(8))[0]
-                z = struct.unpack('d', f.read(8))[0]
+                #need a case for an int or double value type depending on what we get back...
+                if self._type in ['double']:
+                    x = struct.unpack('d', f.read(8))[0]
+                    y = struct.unpack('d', f.read(8))[0]
+                    z = struct.unpack('d', f.read(8))[0]
+                elif self._type in ['int']:
+                    x = struct.unpack('i', f.read(4))[0]
+                    y = struct.unpack('i', f.read(4))[0]
+                    z = struct.unpack('i', f.read(4))[0]
+                #print("(", x, ", ", y, ", ", z, ")")
                 self.add_to_dict(x, y, z)
         return self.point_positions
 
