@@ -27,7 +27,16 @@ def auto_prune_pointset(path, is_skeleton):
             file_path = None
             slice_num = numbers[1]  # Always the second set of numbers...
             if not is_skeleton:
-                file_path = os.path.join(os.path.join(path, dir), slice_num + ".txt")
+                file_path = glob.glob(os.path.join(os.path.join(path, dir), slice_num + ".txt"))
+                if len(file_path) == 0:
+                    file_path = glob.glob(os.path.join(os.path.join(path, dir), "mask_pointset.vcps"))[0]
+                    pointset = vr.VCPSReader(file_path).process_unordered_VCPS_file({})
+                    file = open(os.path.join(os.path.join(path, dir), slice_num + "_mask.txt"), "w")
+                    file.write(ujson.dumps(pointset, indent=1))
+                    file.close()
+                    file_path = os.path.join(os.path.join(path, dir), slice_num + "_mask.txt")
+                else:
+                    file_path = file_path[0]
             else:
                 file_path = glob.glob(os.path.join(os.path.join(path, dir), r'*skeleton*.txt'))
                 if len(file_path) == 0:
