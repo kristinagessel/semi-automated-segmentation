@@ -7,6 +7,6 @@ This project investigates supervised machine learning methods for volumetric seg
 There are tools to convert the segmentations we create with ExtrapolateMask (see below) into a point cloud to be viewed and textured in 3D.
 
 The primary script for semi-automated segmentation is ExtrapolateMask.
-ExtrapolateMask segments individual pages in a micro-CT scan of a manuscript. It requires an initial set of points specified by a user, which can be passed in as a simple .txt file or from the Digital Restoration Initiative's Volume Cartographer software.
+ExtrapolateMask segments individual pages in a micro-CT scan of a manuscript. It requires an initial set of points specified by a user, which can be passed in as a simple .txt file or from EduceLab's Volume Cartographer GUI.
 
 The full project report can be found here: https://docs.google.com/document/d/1fOpQ29GhEHLT3VVXmVYhUPK-1RFpLviFVw5fBkib9LQ/edit?usp=sharing
