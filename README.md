@@ -1,4 +1,4 @@
-# semi-automated-segmentation
+# Thinned Flood-Fill Segmentation
 This project was created by Kristina Gessel at the University of Kentucky as a Master's project. (2019-2020)
 This code was written as a proof of concept. It has been fully deprecated in favor of a cleaner and significantly faster C++ implementation that is part of EduceLab's Volume Cartographer library (https://gitlab.com/educelab/volume-cartographer)
 
